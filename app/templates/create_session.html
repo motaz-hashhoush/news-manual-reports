@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}إنشاء جلسة جديدة{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء جلسة تقرير جديدة</h5>
+            </div>
+            <div class="card-body p-4">
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                <form method="post" action="/admin/create-session">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">اسم الجلسة</label>
+                        <input type="text" name="name" class="form-control form-control-lg"
+                               placeholder="مثال: تغطية خاصة - 5 مارس 2026" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">الوصف (اختياري)</label>
+                        <textarea name="description" class="form-control" rows="3"
+                                  placeholder="وصف مختصر للجلسة..."></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">مدة الجلسة</label>
+                        <div class="d-flex gap-3 mb-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="duration_mode"
+                                       id="dur12" value="12" onchange="toggleCustom(false)">
+                                <label class="form-check-label fs-5" for="dur12">
+                                    <i class="bi bi-clock me-1"></i>12 ساعة
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="duration_mode"
+                                       id="dur24" value="24" checked onchange="toggleCustom(false)">
+                                <label class="form-check-label fs-5" for="dur24">
+                                    <i class="bi bi-clock-history me-1"></i>24 ساعة
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="duration_mode"
+                                       id="durCustom" value="custom" onchange="toggleCustom(true)">
+                                <label class="form-check-label fs-5" for="durCustom">
+                                    <i class="bi bi-sliders me-1"></i>مخصص
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="presetHint" class="form-text mt-1">
+                            <i class="bi bi-info-circle me-1"></i>
+                            تبدأ الجلسة من الساعة 6:00 مساءً اليوم. سيتم إنشاء التقرير تلقائياً وإغلاق الجلسة عند انتهاء المدة.
+                        </div>
+
+                        <div id="customFields" class="border rounded p-3 mt-2" style="display:none; background:#f8f9fa;">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold" for="custom_start">بداية الجلسة</label>
+                                    <input type="datetime-local" class="form-control" id="custom_start" name="custom_start">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold" for="custom_end">نهاية الجلسة</label>
+                                    <input type="datetime-local" class="form-control" id="custom_end" name="custom_end">
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                حدد تاريخ ووقت البداية والنهاية يدوياً.
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                    function toggleCustom(show) {
+                        document.getElementById('customFields').style.display = show ? 'block' : 'none';
+                        document.getElementById('presetHint').style.display = show ? 'none' : 'block';
+                        const cs = document.getElementById('custom_start');
+                        const ce = document.getElementById('custom_end');
+                        if (show) {
+                            cs.required = true;
+                            ce.required = true;
+                        } else {
+                            cs.required = false;
+                            ce.required = false;
+                        }
+                    }
+                    </script>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-check-circle me-1"></i>إنشاء الجلسة
+                        </button>
+                        <a href="/dashboard" class="btn btn-secondary btn-lg">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

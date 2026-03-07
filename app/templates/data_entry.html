@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}إدخال بيانات — {{ session.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>إدخال بيانات</h5>
+                <span class="badge bg-light text-dark">{{ session.name }}</span>
+            </div>
+            <div class="card-body p-4">
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                {% if success %}
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-1"></i>{{ success }}
+                </div>
+                {% endif %}
+
+                <form method="post" action="{{ request.url.path }}" enctype="multipart/form-data">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">فترة الرصد *</label>
+                            <input type="text" name="monitoring_time" class="form-control"
+                                   placeholder="مثال: 05:56:29 PM" required>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">العنوان / NOW *</label>
+                            <input type="text" name="title" class="form-control"
+                                   placeholder="عنوان الخبر أو المادة" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">البرنامج</label>
+                            <input type="text" name="program" class="form-control"
+                                   placeholder="مثال: تغطية خاصة">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">النوع</label>
+                            <select name="entry_type" class="form-select">
+                                <option value="">— اختر —</option>
+                                {% for t in type_values %}
+                                <option value="{{ t }}">{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">التوزيع</label>
+                            <select name="distribution" class="form-select">
+                                <option value="">— اختر —</option>
+                                {% for d in distribution_values %}
+                                <option value="{{ d }}">{{ d }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">اسم الضيف/المراسل</label>
+                            <input type="text" name="guest_reporter_name" class="form-control"
+                                   placeholder="حال وجوده">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">رابط النشر</label>
+                            <input type="text" name="publish_link" class="form-control"
+                                   placeholder="رابط النشر على السوشيال ميديا">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">الأهمية</label>
+                            <input type="text" name="importance" class="form-control"
+                                   placeholder="الأهمية">
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">برنت سكرين (صورة)</label>
+                            <input type="file" name="screenshot" id="screenshotInput" class="form-control"
+                                   accept="image/*">
+                            <div id="pasteZone" tabindex="0"
+                                 style="margin-top:.5rem;border:2px dashed #90a4ae;border-radius:8px;padding:1rem;text-align:center;color:#78909c;cursor:pointer;outline:none;transition:border-color .2s,background .2s;">
+                                <i class="bi bi-clipboard2-plus" style="font-size:1.4rem;"></i>
+                                <span>اضغط هنا ثم Ctrl+V للصق صورة من الحافظة</span>
+                            </div>
+                            <div id="pastePreview" style="display:none;margin-top:.5rem;position:relative;">
+                                <img id="pasteThumb" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid #dee2e6;">
+                                <button type="button" id="pasteRemove"
+                                        class="btn btn-sm btn-danger"
+                                        style="position:absolute;top:4px;left:4px;">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-save me-1"></i>حفظ البيانات
+                        </button>
+                        <a href="/dashboard" class="btn btn-secondary btn-lg">العودة</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center"
+                 role="button" data-bs-toggle="collapse" data-bs-target="#importSection" aria-expanded="false">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-spreadsheet me-2"></i>استيراد من ملف Excel / CSV</h5>
+                <i class="bi bi-chevron-down"></i>
+            </div>
+            <div class="collapse" id="importSection">
+                <div class="card-body p-4">
+                    <form method="post" action="/admin/import/{{ session.id }}" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">اختر ملف CSV أو Excel</label>
+                            <input type="file" name="file" class="form-control form-control-lg"
+                                   accept=".csv,.xlsx,.xls" required>
+                        </div>
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>الأعمدة المطلوبة:</strong> فترة الرصد، العنوان / NOW<br>
+                            <strong>الأعمدة الاختيارية:</strong> البرنامج، النوع، التوزيع، اسم الضيف/المراسل، رابط النشر، الأهمية
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-upload me-1"></i>استيراد البيانات
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const zone = document.getElementById('pasteZone');
+    const input = document.getElementById('screenshotInput');
+    const preview = document.getElementById('pastePreview');
+    const thumb = document.getElementById('pasteThumb');
+    const removeBtn = document.getElementById('pasteRemove');
+
+    function applyClipboardFile(file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+
+        const url = URL.createObjectURL(file);
+        thumb.src = url;
+        preview.style.display = 'block';
+        zone.style.display = 'none';
+    }
+
+    zone.addEventListener('paste', function (e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                applyClipboardFile(item.getAsFile());
+                return;
+            }
+        }
+    });
+
+    zone.addEventListener('focus', function () {
+        zone.style.borderColor = '#1565c0';
+        zone.style.background = '#e3f2fd';
+    });
+    zone.addEventListener('blur', function () {
+        zone.style.borderColor = '#90a4ae';
+        zone.style.background = '';
+    });
+
+    document.addEventListener('paste', function (e) {
+        if (document.activeElement === zone) return;
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                applyClipboardFile(item.getAsFile());
+                return;
+            }
+        }
+    });
+
+    input.addEventListener('change', function () {
+        if (input.files.length) {
+            const url = URL.createObjectURL(input.files[0]);
+            thumb.src = url;
+            preview.style.display = 'block';
+            zone.style.display = 'none';
+        }
+    });
+
+    removeBtn.addEventListener('click', function () {
+        input.value = '';
+        preview.style.display = 'none';
+        zone.style.display = '';
+        thumb.src = '';
+    });
+})();
+</script>
+{% endblock %}

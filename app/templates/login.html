@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0"><i class="bi bi-box-arrow-in-left me-2"></i>تسجيل الدخول</h4>
+            </div>
+            <div class="card-body p-4">
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                <form method="post" action="/login">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">اسم المستخدم</label>
+                        <input type="text" name="username" class="form-control form-control-lg" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">كلمة المرور</label>
+                        <input type="password" name="password" class="form-control form-control-lg" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg w-100 mt-2">دخول</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

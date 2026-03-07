@@ -1,0 +1,125 @@
+import os
+import uuid
+
+from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import ReportSession, DataEntry
+from app.deps import get_current_user
+from app.config import UPLOAD_DIR, DISTRIBUTION_VALUES, TYPE_VALUES
+
+router = APIRouter(prefix="/user")
+
+
+@router.get("/sessions")
+async def list_sessions(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    sessions = (
+        db.query(ReportSession)
+        .filter(ReportSession.status == "active")
+        .order_by(ReportSession.created_at.desc())
+        .all()
+    )
+
+    return request.app.state.templates.TemplateResponse(
+        "user_sessions.html",
+        {"request": request, "user": user, "sessions": sessions},
+    )
+
+
+@router.get("/entry/{session_id}")
+async def entry_page(session_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    report_session = db.query(ReportSession).filter(
+        ReportSession.id == session_id,
+        ReportSession.status == "active",
+    ).first()
+    if not report_session:
+        return RedirectResponse(url="/user/sessions", status_code=303)
+
+    return request.app.state.templates.TemplateResponse(
+        "data_entry.html",
+        {
+            "request": request,
+            "user": user,
+            "session": report_session,
+            "distribution_values": DISTRIBUTION_VALUES,
+            "type_values": TYPE_VALUES,
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@router.post("/entry/{session_id}")
+async def submit_entry(
+    session_id: int,
+    request: Request,
+    monitoring_time: str = Form(...),
+    title: str = Form(...),
+    program: str = Form(""),
+    entry_type: str = Form(""),
+    distribution: str = Form(""),
+    guest_reporter_name: str = Form(""),
+    publish_link: str = Form(""),
+    importance: str = Form(""),
+    screenshot: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    report_session = db.query(ReportSession).filter(
+        ReportSession.id == session_id,
+        ReportSession.status == "active",
+    ).first()
+    if not report_session:
+        return RedirectResponse(url="/user/sessions", status_code=303)
+
+    screenshot_path = None
+    if screenshot and screenshot.filename:
+        ext = os.path.splitext(screenshot.filename)[1]
+        filename = f"{uuid.uuid4().hex}{ext}"
+        save_path = os.path.join(UPLOAD_DIR, filename)
+        with open(save_path, "wb") as f:
+            content = await screenshot.read()
+            f.write(content)
+        screenshot_path = f"/static/uploads/{filename}"
+
+    entry = DataEntry(
+        session_id=session_id,
+        user_id=user.id,
+        monitoring_time=monitoring_time,
+        title=title,
+        program=program,
+        entry_type=entry_type,
+        distribution=distribution,
+        guest_reporter_name=guest_reporter_name,
+        publish_link=publish_link,
+        importance=importance,
+        screenshot_path=screenshot_path,
+    )
+    db.add(entry)
+    db.commit()
+
+    return request.app.state.templates.TemplateResponse(
+        "data_entry.html",
+        {
+            "request": request,
+            "user": user,
+            "session": report_session,
+            "distribution_values": DISTRIBUTION_VALUES,
+            "type_values": TYPE_VALUES,
+            "error": None,
+            "success": "تم إضافة البيانات بنجاح",
+        },
+    )

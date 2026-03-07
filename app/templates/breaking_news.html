@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}أخبار عاجلة — {{ session.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+
+        <div class="card mb-4">
+            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-lightning-charge-fill me-2"></i>إضافة خبر عاجل</h5>
+                <span class="badge bg-light text-dark">{{ session.name }}</span>
+            </div>
+            <div class="card-body p-4">
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                {% if success %}
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-1"></i>{{ success }}
+                </div>
+                {% endif %}
+
+                {% if session.status == 'active' %}
+                <form method="post" action="/admin/breaking-news/{{ session.id }}" enctype="multipart/form-data">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-bold">الوصف (اختياري)</label>
+                            <textarea name="description" class="form-control" rows="2" placeholder="وصف مختصر للخبر العاجل..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">برنت سكرين (صورة) (اختياري)</label>
+                            <input type="file" name="screenshot" id="screenshotInput" class="form-control"
+                                   accept="image/*">
+                            <div id="pasteZone" tabindex="0"
+                                 style="margin-top:.5rem;border:2px dashed #e53935;border-radius:8px;padding:1rem;text-align:center;color:#e53935;cursor:pointer;outline:none;transition:border-color .2s,background .2s;">
+                                <i class="bi bi-clipboard2-plus" style="font-size:1.4rem;"></i>
+                                <span>اضغط هنا ثم Ctrl+V للصق صورة من الحافظة</span>
+                            </div>
+                            <div id="pastePreview" style="display:none;margin-top:.5rem;position:relative;">
+                                <img id="pasteThumb" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid #dee2e6;">
+                                <button type="button" id="pasteRemove"
+                                        class="btn btn-sm btn-danger"
+                                        style="position:absolute;top:4px;left:4px;">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="my-3">
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger btn-lg">
+                            <i class="bi bi-lightning-charge-fill me-1"></i>إضافة خبر عاجل
+                        </button>
+                        <a href="/dashboard" class="btn btn-secondary btn-lg">العودة</a>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-secondary mb-0">
+                    <i class="bi bi-lock me-1"></i>الجلسة مغلقة — لا يمكن إضافة أخبار عاجلة
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-lightning-charge me-2"></i>سجل الأخبار العاجلة</span>
+                <span class="badge bg-danger fs-6">{{ items|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" style="font-size:0.9rem;">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>الوصف</th>
+                                <th>صورة</th>
+                                <th>بواسطة</th>
+                                <th>الوقت</th>
+                                <th>إجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ item.description or '—' }}</td>
+                                <td>
+                                    {% if item.screenshot_path %}
+                                    <a href="{{ item.screenshot_path }}" target="_blank">
+                                        <img src="{{ item.screenshot_path }}" style="max-width:60px;max-height:40px;" class="rounded">
+                                    </a>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>{{ item.user.username }}</td>
+                                <td class="text-nowrap">{{ item.created_at.strftime('%H:%M:%S') }}</td>
+                                <td>
+                                    <form method="post" action="/admin/breaking-news/delete/{{ item.id }}"
+                                          onsubmit="return confirm('هل أنت متأكد من حذف هذا الخبر العاجل؟')">
+                                        <button type="submit" class="btn btn-danger btn-sm">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-4 text-muted">
+                    <i class="bi bi-lightning-charge display-4"></i>
+                    <p class="mt-2">لا توجد أخبار عاجلة في هذه الجلسة</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const zone = document.getElementById('pasteZone');
+    if (!zone) return;
+    const input = document.getElementById('screenshotInput');
+    const preview = document.getElementById('pastePreview');
+    const thumb = document.getElementById('pasteThumb');
+    const removeBtn = document.getElementById('pasteRemove');
+
+    function applyClipboardFile(file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        const url = URL.createObjectURL(file);
+        thumb.src = url;
+        preview.style.display = 'block';
+        zone.style.display = 'none';
+    }
+
+    zone.addEventListener('paste', function (e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                applyClipboardFile(item.getAsFile());
+                return;
+            }
+        }
+    });
+
+    zone.addEventListener('focus', function () {
+        zone.style.borderColor = '#b71c1c';
+        zone.style.background = '#ffebee';
+    });
+    zone.addEventListener('blur', function () {
+        zone.style.borderColor = '#e53935';
+        zone.style.background = '';
+    });
+
+    document.addEventListener('paste', function (e) {
+        if (document.activeElement === zone) return;
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                applyClipboardFile(item.getAsFile());
+                return;
+            }
+        }
+    });
+
+    input.addEventListener('change', function () {
+        if (input.files.length) {
+            const url = URL.createObjectURL(input.files[0]);
+            thumb.src = url;
+            preview.style.display = 'block';
+            zone.style.display = 'none';
+        }
+    });
+
+    removeBtn.addEventListener('click', function () {
+        input.value = '';
+        preview.style.display = 'none';
+        zone.style.display = '';
+        thumb.src = '';
+    });
+})();
+</script>
+{% endblock %}

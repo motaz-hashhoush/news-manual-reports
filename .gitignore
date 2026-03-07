@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+*.db
+*.sqlite3
+venv/
+.venv/
+*.log
+app/static/uploads/
+app/static/reports/
+generated_reports/
+test.ipynb

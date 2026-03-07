@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم{% endblock %}
+
+{% block content %}
+<div class="hero-section text-center rounded-3 mb-4">
+    <h2><i class="bi bi-speedometer2 me-2"></i>لوحة التحكم</h2>
+    <p class="mb-0">مرحباً {{ user.username }} — إدارة جلسات التقارير والبيانات</p>
+</div>
+
+{% if user.role == 'admin' %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center p-4">
+            <div class="display-4 text-primary mb-2"><i class="bi bi-collection"></i></div>
+            <h5>{{ sessions|length }}</h5>
+            <p class="text-muted mb-0">جلسات التقارير</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <a href="/admin/create-session" class="text-decoration-none">
+            <div class="card text-center p-4 border-2 border-dashed" style="border: 2px dashed #1a237e !important; cursor: pointer;">
+                <div class="display-4 text-primary mb-2"><i class="bi bi-plus-circle"></i></div>
+                <h5 class="text-primary">إنشاء جلسة جديدة</h5>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="/admin/users" class="text-decoration-none">
+            <div class="card text-center p-4">
+                <div class="display-4 text-success mb-2"><i class="bi bi-people-fill"></i></div>
+                <h5>إدارة المستخدمين</h5>
+                <p class="text-muted mb-0">إنشاء وإدارة الحسابات</p>
+            </div>
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul me-2"></i>جلسات التقارير</span>
+    </div>
+    <div class="card-body p-0">
+        {% if sessions %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>اسم الجلسة</th>
+                        <th>الوصف</th>
+                        <th>الفترة</th>
+                        <th>الحالة</th>
+                        <th>تاريخ الإنشاء</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sessions %}
+                    <tr class="{% if s.status == 'closed' %}table-secondary{% endif %}">
+                        <td>{{ s.id }}</td>
+                        <td class="fw-bold">{{ s.name }}</td>
+                        <td>{{ s.description or '—' }}</td>
+                        <td>
+                            {% if s.start_at and s.deadline_at %}
+                            <small class="d-block">{{ s.start_at.strftime('%m-%d %H:%M') }}</small>
+                            <small class="d-block text-muted">↓</small>
+                            <small class="d-block">{{ s.deadline_at.strftime('%m-%d %H:%M') }}</small>
+                            {% else %}
+                            <span class="badge bg-info">{{ s.duration_hours }} ساعة</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if s.status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                {% if s.status == 'active' %}نشطة{% else %}مغلقة{% endif %}
+                            </span>
+                        </td>
+                        <td>{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                {% if user.role == 'admin' %}
+                                {% if s.status == 'active' %}
+                                <a href="/admin/entry/{{ s.id }}" class="btn btn-sm btn-primary" title="إدخال بيانات">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <a href="/admin/breaking-news/{{ s.id }}" class="btn btn-sm btn-danger" title="إضافة خبر عاجل">
+                                    <i class="bi bi-lightning-charge-fill"></i>
+                                </a>
+                                {% endif %}
+                                <a href="/admin/entries/{{ s.id }}" class="btn btn-sm btn-info" title="عرض البيانات">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <form method="post" action="/admin/generate-report/{{ s.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success" title="إنشاء تقرير">
+                                        <i class="bi bi-file-earmark-word"></i>
+                                    </button>
+                                </form>
+                                <a href="/admin/reports/{{ s.id }}" class="btn btn-sm btn-warning" title="التقارير">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                {% else %}
+                                {% if s.status == 'active' %}
+                                <a href="/user/entry/{{ s.id }}" class="btn btn-sm btn-primary" title="إدخال بيانات">
+                                    <i class="bi bi-pencil-square"></i> إدخال
+                                </a>
+                                {% else %}
+                                <span class="text-muted small">مغلقة</span>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center p-5 text-muted">
+            <i class="bi bi-inbox display-1"></i>
+            <p class="mt-3">لا توجد جلسات تقارير بعد</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
