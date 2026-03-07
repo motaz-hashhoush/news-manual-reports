@@ -6,6 +6,8 @@ alembic
 jinja2
 python-multipart
 bcrypt
+pandas
+openpyxl
 python-docx
 itsdangerous
 apscheduler
