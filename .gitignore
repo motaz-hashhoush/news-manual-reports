@@ -13,7 +13,8 @@ venv/
 app/static/uploads/
 app/static/reports/
 generated_reports/
-test.ipynb
+*.ipynb
 alembic/
 alembic.ini
 example/
+create_db.py
