@@ -14,3 +14,6 @@ app/static/uploads/
 app/static/reports/
 generated_reports/
 test.ipynb
+alembic/
+alembic.ini
+example/
