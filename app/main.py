@@ -1,8 +1,8 @@
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 from fastapi import FastAPI, Request
+from app.timezone import now_palestine
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -18,7 +18,7 @@ def check_session_deadlines():
     """Check all active sessions and close those past their deadline after generating a report."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = now_palestine()
         expired_sessions = (
             db.query(ReportSession)
             .filter(
@@ -64,9 +64,24 @@ scheduler.add_job(
 )
 
 
+def _ensure_screenshot_data_columns():
+    """Add screenshot_data column to existing tables if missing."""
+    from sqlalchemy import inspect as sa_inspect, text
+    inspector = sa_inspect(engine)
+    for table_name in ("data_entries", "breaking_news"):
+        columns = [c["name"] for c in inspector.get_columns(table_name)]
+        if "screenshot_data" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    f'ALTER TABLE {table_name} ADD COLUMN screenshot_data BYTEA'
+                ))
+            print(f"Added screenshot_data column to {table_name}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _ensure_screenshot_data_columns()
 
     db = SessionLocal()
     try:

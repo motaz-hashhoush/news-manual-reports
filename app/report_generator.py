@@ -1,8 +1,10 @@
+import io
 import os
 from collections import Counter
 from datetime import datetime
 
 from docx import Document
+from app.timezone import now_palestine
 from docx.shared import Inches, Pt, Cm, RGBColor, Emu
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -10,6 +12,8 @@ from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn
 
 from app.config import UPLOAD_DIR
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -137,7 +141,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     )
     _add_rtl_paragraph(
         doc,
-        f"تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"تاريخ التقرير: {now_palestine().strftime('%Y-%m-%d %H:%M')}",
         size=11,
         alignment=WD_ALIGN_PARAGRAPH.CENTER,
     )
@@ -336,21 +340,38 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     doc.add_paragraph("")
 
     # --- Screenshots section ---
-    screenshot_entries = [e for e in entries if e.screenshot_path]
+    screenshot_entries = [e for e in entries if e.screenshot_path or e.screenshot_data]
     if screenshot_entries:
         _add_rtl_paragraph(doc, "نماذج (سكرين شوت)", bold=True, size=13)
         for sc_entry in screenshot_entries:
-            abs_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                sc_entry.screenshot_path.lstrip("/"),
-            )
-            if os.path.exists(abs_path):
+            added = False
+
+            if sc_entry.screenshot_path:
+                filename = os.path.basename(sc_entry.screenshot_path)
+                abs_path = os.path.join(UPLOAD_DIR, filename)
+                if not os.path.exists(abs_path):
+                    abs_path = os.path.join(STATIC_DIR, sc_entry.screenshot_path.lstrip("/").removeprefix("static/"))
+                if os.path.exists(abs_path):
+                    try:
+                        doc.add_picture(abs_path, width=Inches(5))
+                        last_p = doc.paragraphs[-1]
+                        last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        added = True
+                    except Exception:
+                        pass
+
+            if not added and sc_entry.screenshot_data:
                 try:
-                    doc.add_picture(abs_path, width=Inches(5))
+                    image_stream = io.BytesIO(sc_entry.screenshot_data)
+                    doc.add_picture(image_stream, width=Inches(5))
                     last_p = doc.paragraphs[-1]
                     last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    added = True
                 except Exception:
-                    _add_rtl_paragraph(doc, f"[صورة: {sc_entry.title}]")
+                    pass
+
+            if not added:
+                _add_rtl_paragraph(doc, f"[صورة غير متوفرة: {sc_entry.title}]")
 
         doc.add_paragraph("")
 
@@ -441,7 +462,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         for cell in row.cells:
             _set_cell_rtl(cell)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = now_palestine().strftime("%Y%m%d_%H%M%S")
     safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in report_session.name).strip()
     filename = f"{safe_name}_{timestamp}.docx"
     file_path = os.path.join(REPORTS_DIR, filename)

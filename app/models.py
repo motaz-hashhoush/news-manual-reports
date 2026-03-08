@@ -1,11 +1,11 @@
-from datetime import datetime
-
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, ForeignKey, Enum as SAEnum,
+    LargeBinary,
 )
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.timezone import now_palestine
 
 
 class User(Base):
@@ -15,7 +15,7 @@ class User(Base):
     username = Column(String(150), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="user")  # "admin" or "user"
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=now_palestine)
 
     entries = relationship("DataEntry", back_populates="user")
     sessions_created = relationship("ReportSession", back_populates="created_by_user")
@@ -33,7 +33,7 @@ class ReportSession(Base):
     duration_hours = Column(Integer, nullable=False, default=24)  # 12 or 24
     start_at = Column(DateTime, nullable=True)
     deadline_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=now_palestine)
 
     created_by_user = relationship("User", back_populates="sessions_created")
     entries = relationship("DataEntry", back_populates="session", order_by="DataEntry.monitoring_time")
@@ -57,8 +57,9 @@ class DataEntry(Base):
     publish_link = Column(Text, nullable=True)                 # رابط النشر
     importance = Column(String(100), nullable=True)            # الأهمية
     screenshot_path = Column(String(500), nullable=True)       # برنت سكرين
+    screenshot_data = Column(LargeBinary, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=now_palestine)
 
     session = relationship("ReportSession", back_populates="entries")
     user = relationship("User", back_populates="entries")
@@ -72,7 +73,8 @@ class BreakingNews(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     description = Column(Text, nullable=True)
     screenshot_path = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
+    screenshot_data = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, default=now_palestine)
 
     session = relationship("ReportSession", back_populates="breaking_news_items")
     user = relationship("User", back_populates="breaking_news_items")
@@ -85,6 +87,6 @@ class GeneratedReport(Base):
     session_id = Column(Integer, ForeignKey("report_sessions.id"), nullable=False)
     file_path = Column(String(500), nullable=False)
     report_type = Column(String(20), nullable=False)  # "on_demand", "12h", "24h"
-    generated_at = Column(DateTime, default=datetime.now)
+    generated_at = Column(DateTime, default=now_palestine)
 
     session = relationship("ReportSession", back_populates="generated_reports")

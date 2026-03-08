@@ -86,14 +86,16 @@ async def submit_entry(
         return RedirectResponse(url="/user/sessions", status_code=303)
 
     screenshot_path = None
+    screenshot_data = None
     if screenshot and screenshot.filename:
         ext = os.path.splitext(screenshot.filename)[1]
         filename = f"{uuid.uuid4().hex}{ext}"
         save_path = os.path.join(UPLOAD_DIR, filename)
+        content = await screenshot.read()
         with open(save_path, "wb") as f:
-            content = await screenshot.read()
             f.write(content)
         screenshot_path = f"/static/uploads/{filename}"
+        screenshot_data = content
 
     entry = DataEntry(
         session_id=session_id,
@@ -107,6 +109,7 @@ async def submit_entry(
         publish_link=publish_link,
         importance=importance,
         screenshot_path=screenshot_path,
+        screenshot_data=screenshot_data,
     )
     db.add(entry)
     db.commit()

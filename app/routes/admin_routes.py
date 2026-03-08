@@ -13,6 +13,7 @@ from app.models import User, ReportSession, DataEntry, GeneratedReport, Breaking
 from app.deps import get_current_user
 from app.auth import hash_password
 from app.config import UPLOAD_DIR, DISTRIBUTION_VALUES, TYPE_VALUES
+from app.timezone import now_palestine
 
 COLUMN_MAP = {
     "فترة الرصد": "monitoring_time",
@@ -80,7 +81,7 @@ async def create_session(
         duration_hours = max(1, int(diff.total_seconds() / 3600))
     else:
         duration_hours = int(duration_mode) if duration_mode in ("12", "24") else 24
-        now = datetime.now()
+        now = now_palestine()
         start_at = now.replace(hour=18, minute=0, second=0, microsecond=0)
         deadline_at = start_at + timedelta(hours=duration_hours)
 
@@ -145,14 +146,16 @@ async def submit_entry(
         return RedirectResponse(url="/dashboard", status_code=303)
 
     screenshot_path = None
+    screenshot_data = None
     if screenshot and screenshot.filename:
         ext = os.path.splitext(screenshot.filename)[1]
         filename = f"{uuid.uuid4().hex}{ext}"
         save_path = os.path.join(UPLOAD_DIR, filename)
+        content = await screenshot.read()
         with open(save_path, "wb") as f:
-            content = await screenshot.read()
             f.write(content)
         screenshot_path = f"/static/uploads/{filename}"
+        screenshot_data = content
 
     entry = DataEntry(
         session_id=session_id,
@@ -166,6 +169,7 @@ async def submit_entry(
         publish_link=publish_link,
         importance=importance,
         screenshot_path=screenshot_path,
+        screenshot_data=screenshot_data,
     )
     db.add(entry)
     db.commit()
@@ -396,10 +400,7 @@ async def delete_entry(entry_id: int, request: Request, db: Session = Depends(ge
     session_id = entry.session_id
 
     if entry.screenshot_path:
-        full_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..", entry.screenshot_path.lstrip("/")
-        )
+        full_path = os.path.join(UPLOAD_DIR, os.path.basename(entry.screenshot_path))
         if os.path.exists(full_path):
             os.remove(full_path)
 
@@ -459,20 +460,23 @@ async def submit_breaking_news(
         return RedirectResponse(url="/dashboard", status_code=303)
 
     screenshot_path = None
+    screenshot_data = None
     if screenshot and screenshot.filename:
         ext = os.path.splitext(screenshot.filename)[1]
         filename = f"bn_{uuid.uuid4().hex}{ext}"
         save_path = os.path.join(UPLOAD_DIR, filename)
+        content = await screenshot.read()
         with open(save_path, "wb") as f:
-            content = await screenshot.read()
             f.write(content)
         screenshot_path = f"/static/uploads/{filename}"
+        screenshot_data = content
 
     item = BreakingNews(
         session_id=session_id,
         user_id=user.id,
         description=description.strip() or None,
         screenshot_path=screenshot_path,
+        screenshot_data=screenshot_data,
     )
     db.add(item)
     db.commit()
@@ -510,10 +514,7 @@ async def delete_breaking_news(item_id: int, request: Request, db: Session = Dep
     session_id = item.session_id
 
     if item.screenshot_path:
-        full_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..", item.screenshot_path.lstrip("/")
-        )
+        full_path = os.path.join(UPLOAD_DIR, os.path.basename(item.screenshot_path))
         if os.path.exists(full_path):
             os.remove(full_path)
 
