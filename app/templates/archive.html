@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}أرشيف التقارير{% endblock %}
+
+{% block extra_css %}
+<style>
+    .archive-header {
+        background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+    }
+    
+    .archive-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    
+    .archive-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+    
+    .report-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .report-card:hover {
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    
+    .report-card-header {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+        padding: 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .report-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1a237e;
+        margin: 0;
+    }
+    
+    .report-meta {
+        display: flex;
+        gap: 2rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+        color: #495057;
+    }
+    
+    .meta-item i {
+        color: #1a237e;
+        font-size: 1.1rem;
+    }
+    
+    .meta-label {
+        font-weight: 600;
+        color: #1a237e;
+    }
+    
+    .report-card-body {
+        padding: 1.5rem;
+    }
+    
+    .report-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stat-box {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+        border-right: 4px solid #1a237e;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a237e;
+    }
+    
+    .stat-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .report-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-start;
+    }
+    
+    .btn-view {
+        background: linear-gradient(135deg, #1a237e 0%, #1565c0 100%);
+        border: none;
+        color: white;
+        padding: 0.5rem 1.5rem;
+        border-radius: 6px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-view:hover {
+        background: linear-gradient(135deg, #0d1b6e 0%, #0d47a1 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(26, 35, 126, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+    
+    .btn-download {
+        background: #28a745;
+        border: none;
+        color: white;
+        padding: 0.5rem 1.5rem;
+        border-radius: 6px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-download:hover {
+        background: #218838;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        color: #ccc;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-state h3 {
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-state p {
+        color: #adb5bd;
+    }
+    
+    .pagination-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 2rem;
+    }
+    
+    .pagination {
+        display: flex;
+        gap: 0.5rem;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .pagination li {
+        display: inline-block;
+    }
+    
+    .pagination a,
+    .pagination span {
+        display: inline-block;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #1a237e;
+        transition: all 0.3s ease;
+    }
+    
+    .pagination a:hover {
+        background: #1a237e;
+        color: white;
+        border-color: #1a237e;
+    }
+    
+    .pagination .active span {
+        background: #1a237e;
+        color: white;
+        border-color: #1a237e;
+    }
+    
+    .pagination .disabled span {
+        color: #ccc;
+        cursor: not-allowed;
+    }
+    
+    .report-type-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .badge-12h {
+        background: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .badge-24h {
+        background: #f3e5f5;
+        color: #7b1fa2;
+    }
+    
+    .badge-on_demand {
+        background: #fff3e0;
+        color: #e65100;
+    }
+    
+    .no-reports {
+        background: #f8f9fa;
+        padding: 2rem;
+        border-radius: 12px;
+        text-align: center;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="archive-header">
+    <h1>
+        <i class="bi bi-archive me-2"></i>أرشيف التقارير
+    </h1>
+    <p>عرض شامل لجميع التقارير المُولّدة في النظام</p>
+</div>
+
+{% if reports %}
+    <div class="reports-container">
+        {% for report in reports %}
+        <div class="report-card">
+            <div class="report-card-header">
+                <h3 class="report-title">{{ report.session_name }}</h3>
+                <div class="report-meta">
+                    <div class="meta-item">
+                        <i class="bi bi-calendar-event"></i>
+                        <span class="meta-label">تاريخ الجلسة:</span>
+                        <span>{{ report.session_date.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <i class="bi bi-clock"></i>
+                        <span class="meta-label">المدة:</span>
+                        <span>{{ report.duration_hours }} ساعة</span>
+                    </div>
+                    <div class="meta-item">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span class="meta-label">وقت التوليد:</span>
+                        <span>{{ report.generated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="report-card-body">
+                <div class="report-stats">
+                    <div class="stat-box">
+                        <div class="stat-value">{{ report.entries_count }}</div>
+                        <div class="stat-label">عدد المواد</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">
+                            {% if report.report_type == '12h' %}
+                            12
+                            {% elif report.report_type == '24h' %}
+                            24
+                            {% else %}
+                            عند الطلب
+                            {% endif %}
+                        </div>
+                        <div class="stat-label">نوع التقرير</div>
+                    </div>
+                    <div class="stat-box">
+                        <span class="report-type-badge {% if report.report_type == '12h' %}badge-12h{% elif report.report_type == '24h' %}badge-24h{% else %}badge-on_demand{% endif %}">
+                            {% if report.report_type == '12h' %}
+                            تقرير 12 ساعة
+                            {% elif report.report_type == '24h' %}
+                            تقرير 24 ساعة
+                            {% else %}
+                            عند الطلب
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="report-actions">
+                    <a href="/public/{{ report.id }}" class="btn-view" target="_blank">
+                        <i class="bi bi-eye"></i>
+                        عرض التقرير
+                    </a>
+                    <a href="/user/download/{{ report.id }}" class="btn-download">
+                        <i class="bi bi-download"></i>
+                        تحميل (Word)
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if total_pages > 1 %}
+    <div class="pagination-container">
+        <ul class="pagination">
+            {% if current_page > 1 %}
+            <li>
+                <a href="/user/archive?page=1">
+                    <i class="bi bi-chevron-double-right"></i>
+                </a>
+            </li>
+            <li>
+                <a href="/user/archive?page={{ current_page - 1 }}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="disabled">
+                <span><i class="bi bi-chevron-double-right"></i></span>
+            </li>
+            <li class="disabled">
+                <span><i class="bi bi-chevron-right"></i></span>
+            </li>
+            {% endif %}
+            
+            {% for page_num in range(1, total_pages + 1) %}
+                {% if page_num == current_page %}
+                <li class="active">
+                    <span>{{ page_num }}</span>
+                </li>
+                {% else %}
+                <li>
+                    <a href="/user/archive?page={{ page_num }}">{{ page_num }}</a>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if current_page < total_pages %}
+            <li>
+                <a href="/user/archive?page={{ current_page + 1 }}">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            <li>
+                <a href="/user/archive?page={{ total_pages }}">
+                    <i class="bi bi-chevron-double-left"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="disabled">
+                <span><i class="bi bi-chevron-left"></i></span>
+            </li>
+            <li class="disabled">
+                <span><i class="bi bi-chevron-double-left"></i></span>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <div style="text-align: center; margin-top: 2rem; color: #6c757d;">
+        <p>إجمالي التقارير: <strong>{{ total_reports }}</strong></p>
+    </div>
+
+{% else %}
+    <div class="no-reports">
+        <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc; display: block; margin-bottom: 1rem;"></i>
+        <h3>لا توجد تقارير حتى الآن</h3>
+        <p>سيظهر هنا جميع التقارير المُولّدة من جلسات التقارير</p>
+    </div>
+{% endif %}
+
+{% endblock %}

@@ -470,3 +470,28 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     doc.save(file_path)
 
     return file_path
+
+class _CustomReportSession:
+    """
+    Fake session object to reuse the existing report generator
+    without modifying its logic.
+    """
+    def __init__(self, start_at, end_at):
+        self.name = "تقرير مخصص حسب فترة زمنية"
+        self.description = "التطورات الإخبارية"
+        self.start_at = start_at
+        self.deadline_at = end_at
+
+
+def generate_custom_docx_report(start_dt, end_dt, entries, breaking_news_count: int = 0) -> str:
+    """
+    Generate a custom report using the same logic as session reports
+    without duplicating the report generation code.
+    """
+    fake_session = _CustomReportSession(start_dt, end_dt)
+
+    return generate_docx_report(
+        report_session=fake_session,
+        entries=entries,
+        breaking_news_count=breaking_news_count,
+    )
