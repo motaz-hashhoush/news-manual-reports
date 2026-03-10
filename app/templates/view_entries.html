@@ -68,6 +68,7 @@
                         <th>الضيف/المراسل</th>
                         <th>رابط النشر</th>
                         <th>الأهمية</th>
+                        <th>المدة الزمنية</th>
                         <th>صورة</th>
                         <th>إجراء</th>
                     </tr>
@@ -92,6 +93,7 @@
                             {% endif %}
                         </td>
                         <td>{{ e.importance or '—' }}</td>
+                        <td>{{ e.clip_duration or '—' }}</td>
                         <td>
                             {% if e.screenshot_path %}
                             <a href="{{ e.screenshot_path }}" target="_blank">
@@ -102,12 +104,17 @@
                             {% endif %}
                         </td>
                         <td>
-                            <form method="post" action="/admin/delete-entry/{{ e.id }}"
-                                  onsubmit="return confirm('هل أنت متأكد من حذف هذا السجل؟')">
-                                <button type="submit" class="btn btn-danger btn-sm">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
+                            <div class="d-flex gap-1">
+                                <a href="/admin/edit-entry/{{ e.id }}" class="btn btn-warning btn-sm" title="تعديل">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <form method="post" action="/admin/delete-entry/{{ e.id }}"
+                                      onsubmit="return confirm('هل أنت متأكد من حذف هذا السجل؟')">
+                                    <button type="submit" class="btn btn-danger btn-sm" title="حذف">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

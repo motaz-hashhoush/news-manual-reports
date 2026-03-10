@@ -8,10 +8,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.database import engine, SessionLocal, Base
-from app.models import User, ReportSession, DataEntry, GeneratedReport, BreakingNews
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session as DBSession
+
+from app.database import engine, SessionLocal, Base, get_db
+from app.models import User, ReportSession, DataEntry, GeneratedReport, BreakingNews, LookupValue
 from app.auth import hash_password
 from app.report_generator import generate_docx_report
+
+from sqlalchemy import inspect as sa_inspect, text
 
 
 def check_session_deadlines():
@@ -59,30 +64,14 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(
     check_session_deadlines,
     "interval",
-    minutes=1,
+    minutes=10,
     id="deadline_checker",
 )
-
-
-def _ensure_screenshot_data_columns():
-    """Add screenshot_data column to existing tables if missing."""
-    from sqlalchemy import inspect as sa_inspect, text
-    inspector = sa_inspect(engine)
-    for table_name in ("data_entries", "breaking_news"):
-        columns = [c["name"] for c in inspector.get_columns(table_name)]
-        if "screenshot_data" not in columns:
-            with engine.begin() as conn:
-                conn.execute(text(
-                    f'ALTER TABLE {table_name} ADD COLUMN screenshot_data BYTEA'
-                ))
-            print(f"Added screenshot_data column to {table_name}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    _ensure_screenshot_data_columns()
-
     db = SessionLocal()
     try:
         admin = db.query(User).filter(User.username == "admin").first()
@@ -95,6 +84,8 @@ async def lifespan(app: FastAPI):
             db.add(admin)
             db.commit()
             print("Default admin user created (admin / admin123)")
+
+     
     finally:
         db.close()
 
@@ -115,11 +106,22 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.admin_routes import router as admin_router
 from app.routes.user_routes import router as user_router
+from app.routes.public_routes import router as public_router
 
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(admin_router)
 app.include_router(user_router)
+app.include_router(public_router)
+
+
+from fastapi import Depends, Query
+
+
+@app.get("/api/lookup")
+async def list_lookup_values(category: str = Query(...), db: DBSession = Depends(get_db)):
+    rows = db.query(LookupValue).filter(LookupValue.category == category).order_by(LookupValue.name).all()
+    return JSONResponse([{"id": r.id, "name": r.name} for r in rows])
 
 
 @app.get("/")

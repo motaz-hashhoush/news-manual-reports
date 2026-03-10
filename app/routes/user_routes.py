@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ReportSession, DataEntry
+from app.models import ReportSession, DataEntry, BreakingNews
 from app.deps import get_current_user
 from app.config import UPLOAD_DIR, DISTRIBUTION_VALUES, TYPE_VALUES
 
@@ -47,16 +47,33 @@ async def entry_page(session_id: int, request: Request, db: Session = Depends(ge
 
     return request.app.state.templates.TemplateResponse(
         "data_entry.html",
-        {
-            "request": request,
-            "user": user,
-            "session": report_session,
-            "distribution_values": DISTRIBUTION_VALUES,
-            "type_values": TYPE_VALUES,
-            "error": None,
-            "success": None,
-        },
+        _user_entry_ctx(request, user, report_session, db),
     )
+
+
+def _user_entry_ctx(request, user, report_session, db, error=None, success=None):
+    entries = (
+        db.query(DataEntry)
+        .filter(DataEntry.session_id == report_session.id)
+        .order_by(DataEntry.monitoring_time)
+        .all()
+    )
+    breaking_news_count = (
+        db.query(BreakingNews)
+        .filter(BreakingNews.session_id == report_session.id)
+        .count()
+    )
+    return {
+        "request": request,
+        "user": user,
+        "session": report_session,
+        "distribution_values": DISTRIBUTION_VALUES,
+        "type_values": TYPE_VALUES,
+        "entries": entries,
+        "breaking_news_count": breaking_news_count,
+        "error": error,
+        "success": success,
+    }
 
 
 @router.post("/entry/{session_id}")
@@ -71,6 +88,7 @@ async def submit_entry(
     guest_reporter_name: str = Form(""),
     publish_link: str = Form(""),
     importance: str = Form(""),
+    clip_duration: str = Form(""),
     screenshot: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
@@ -108,6 +126,7 @@ async def submit_entry(
         guest_reporter_name=guest_reporter_name,
         publish_link=publish_link,
         importance=importance,
+        clip_duration=clip_duration,
         screenshot_path=screenshot_path,
         screenshot_data=screenshot_data,
     )
@@ -116,13 +135,5 @@ async def submit_entry(
 
     return request.app.state.templates.TemplateResponse(
         "data_entry.html",
-        {
-            "request": request,
-            "user": user,
-            "session": report_session,
-            "distribution_values": DISTRIBUTION_VALUES,
-            "type_values": TYPE_VALUES,
-            "error": None,
-            "success": "تم إضافة البيانات بنجاح",
-        },
+        _user_entry_ctx(request, user, report_session, db, success="تم إضافة البيانات بنجاح"),
     )

@@ -27,6 +27,7 @@ COLUMN_MAP = {
     "اسم الضيف/المراسل - حال وجوده": "guest_reporter_name",
     "رابط النشر": "publish_link",
     "الأهمية": "importance",
+    "المدة الزمنية للمقطع": "clip_duration",
 }
 
 router = APIRouter(prefix="/admin")
@@ -98,6 +99,62 @@ async def create_session(
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+@router.post("/update-session-time/{session_id}")
+async def update_session_time(
+    session_id: int,
+    request: Request,
+    start_at: str = Form(...),
+    deadline_at: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = _require_admin(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    report_session = db.query(ReportSession).filter(ReportSession.id == session_id).first()
+    if not report_session:
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    try:
+        new_start = datetime.strptime(start_at, "%Y-%m-%dT%H:%M")
+        new_deadline = datetime.strptime(deadline_at, "%Y-%m-%dT%H:%M")
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    report_session.start_at = new_start
+    report_session.deadline_at = new_deadline
+    diff = new_deadline - new_start
+    report_session.duration_hours = max(1, int(diff.total_seconds() / 3600))
+    db.commit()
+
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+def _entry_page_context(request, user, report_session, db, error=None, success=None):
+    entries = (
+        db.query(DataEntry)
+        .filter(DataEntry.session_id == report_session.id)
+        .order_by(DataEntry.monitoring_time)
+        .all()
+    )
+    breaking_news_count = (
+        db.query(BreakingNews)
+        .filter(BreakingNews.session_id == report_session.id)
+        .count()
+    )
+    return {
+        "request": request,
+        "user": user,
+        "session": report_session,
+        "distribution_values": DISTRIBUTION_VALUES,
+        "type_values": TYPE_VALUES,
+        "entries": entries,
+        "breaking_news_count": breaking_news_count,
+        "error": error,
+        "success": success,
+    }
+
+
 @router.get("/entry/{session_id}")
 async def data_entry_page(session_id: int, request: Request, db: Session = Depends(get_db)):
     user = _require_admin(request, db)
@@ -105,20 +162,12 @@ async def data_entry_page(session_id: int, request: Request, db: Session = Depen
         return RedirectResponse(url="/login", status_code=303)
 
     report_session = db.query(ReportSession).filter(ReportSession.id == session_id).first()
-    if not report_session or report_session.status != "active":
+    if not report_session:
         return RedirectResponse(url="/dashboard", status_code=303)
 
     return request.app.state.templates.TemplateResponse(
         "data_entry.html",
-        {
-            "request": request,
-            "user": user,
-            "session": report_session,
-            "distribution_values": DISTRIBUTION_VALUES,
-            "type_values": TYPE_VALUES,
-            "error": None,
-            "success": None,
-        },
+        _entry_page_context(request, user, report_session, db),
     )
 
 
@@ -134,6 +183,7 @@ async def submit_entry(
     guest_reporter_name: str = Form(""),
     publish_link: str = Form(""),
     importance: str = Form(""),
+    clip_duration: str = Form(""),
     screenshot: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
@@ -142,7 +192,7 @@ async def submit_entry(
         return RedirectResponse(url="/login", status_code=303)
 
     report_session = db.query(ReportSession).filter(ReportSession.id == session_id).first()
-    if not report_session or report_session.status != "active":
+    if not report_session:
         return RedirectResponse(url="/dashboard", status_code=303)
 
     screenshot_path = None
@@ -168,6 +218,7 @@ async def submit_entry(
         guest_reporter_name=guest_reporter_name,
         publish_link=publish_link,
         importance=importance,
+        clip_duration=clip_duration,
         screenshot_path=screenshot_path,
         screenshot_data=screenshot_data,
     )
@@ -176,15 +227,7 @@ async def submit_entry(
 
     return request.app.state.templates.TemplateResponse(
         "data_entry.html",
-        {
-            "request": request,
-            "user": user,
-            "session": report_session,
-            "distribution_values": DISTRIBUTION_VALUES,
-            "type_values": TYPE_VALUES,
-            "error": None,
-            "success": "تم إضافة البيانات بنجاح",
-        },
+        _entry_page_context(request, user, report_session, db, success="تم إضافة البيانات بنجاح"),
     )
 
 
@@ -200,21 +243,13 @@ async def import_entries(
         return RedirectResponse(url="/login", status_code=303)
 
     report_session = db.query(ReportSession).filter(ReportSession.id == session_id).first()
-    if not report_session or report_session.status != "active":
+    if not report_session:
         return RedirectResponse(url="/dashboard", status_code=303)
 
     def _render(error=None, success=None):
         return request.app.state.templates.TemplateResponse(
             "data_entry.html",
-            {
-                "request": request,
-                "user": user,
-                "session": report_session,
-                "distribution_values": DISTRIBUTION_VALUES,
-                "type_values": TYPE_VALUES,
-                "error": error,
-                "success": success,
-            },
+            _entry_page_context(request, user, report_session, db, error=error, success=success),
         )
 
     if not file or not file.filename:
@@ -268,6 +303,7 @@ async def import_entries(
             guest_reporter_name=str(row.get("guest_reporter_name", "")).strip(),
             publish_link=str(row.get("publish_link", "")).strip(),
             importance=str(row.get("importance", "")).strip(),
+            clip_duration=str(row.get("clip_duration", "")).strip(),
         )
         db.add(entry)
         inserted += 1
@@ -387,6 +423,101 @@ async def download_report(report_id: int, request: Request, db: Session = Depend
     )
 
 
+@router.get("/edit-entry/{entry_id}")
+async def edit_entry_page(entry_id: int, request: Request, db: Session = Depends(get_db)):
+    user = _require_admin(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    entry = db.query(DataEntry).filter(DataEntry.id == entry_id).first()
+    if not entry:
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    report_session = db.query(ReportSession).filter(ReportSession.id == entry.session_id).first()
+
+    return request.app.state.templates.TemplateResponse(
+        "edit_entry.html",
+        {
+            "request": request,
+            "user": user,
+            "session": report_session,
+            "entry": entry,
+            "distribution_values": DISTRIBUTION_VALUES,
+            "type_values": TYPE_VALUES,
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@router.post("/edit-entry/{entry_id}")
+async def update_entry(
+    entry_id: int,
+    request: Request,
+    monitoring_time: str = Form(...),
+    title: str = Form(...),
+    program: str = Form(""),
+    entry_type: str = Form(""),
+    distribution: str = Form(""),
+    guest_reporter_name: str = Form(""),
+    publish_link: str = Form(""),
+    importance: str = Form(""),
+    clip_duration: str = Form(""),
+    screenshot: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    user = _require_admin(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    entry = db.query(DataEntry).filter(DataEntry.id == entry_id).first()
+    if not entry:
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    report_session = db.query(ReportSession).filter(ReportSession.id == entry.session_id).first()
+
+    entry.monitoring_time = monitoring_time
+    entry.title = title
+    entry.program = program
+    entry.entry_type = entry_type
+    entry.distribution = distribution
+    entry.guest_reporter_name = guest_reporter_name
+    entry.publish_link = publish_link
+    entry.importance = importance
+    entry.clip_duration = clip_duration
+
+    if screenshot and screenshot.filename:
+        if entry.screenshot_path:
+            old_path = os.path.join(UPLOAD_DIR, os.path.basename(entry.screenshot_path))
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+        ext = os.path.splitext(screenshot.filename)[1]
+        filename = f"{uuid.uuid4().hex}{ext}"
+        save_path = os.path.join(UPLOAD_DIR, filename)
+        content = await screenshot.read()
+        with open(save_path, "wb") as f:
+            f.write(content)
+        entry.screenshot_path = f"/static/uploads/{filename}"
+        entry.screenshot_data = content
+
+    db.commit()
+
+    return request.app.state.templates.TemplateResponse(
+        "edit_entry.html",
+        {
+            "request": request,
+            "user": user,
+            "session": report_session,
+            "entry": entry,
+            "distribution_values": DISTRIBUTION_VALUES,
+            "type_values": TYPE_VALUES,
+            "error": None,
+            "success": "تم تعديل البيانات بنجاح",
+        },
+    )
+
+
 @router.post("/delete-entry/{entry_id}")
 async def delete_entry(entry_id: int, request: Request, db: Session = Depends(get_db)):
     user = _require_admin(request, db)
@@ -407,7 +538,7 @@ async def delete_entry(entry_id: int, request: Request, db: Session = Depends(ge
     db.delete(entry)
     db.commit()
 
-    return RedirectResponse(url=f"/admin/entries/{session_id}", status_code=303)
+    return RedirectResponse(url=f"/admin/entry/{session_id}", status_code=303)
 
 
 # ── Breaking News ─────────────────────────────────────────────────────────────
@@ -456,7 +587,7 @@ async def submit_breaking_news(
         return RedirectResponse(url="/login", status_code=303)
 
     report_session = db.query(ReportSession).filter(ReportSession.id == session_id).first()
-    if not report_session or report_session.status != "active":
+    if not report_session:
         return RedirectResponse(url="/dashboard", status_code=303)
 
     screenshot_path = None

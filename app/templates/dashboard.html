@@ -69,6 +69,12 @@
                             {% else %}
                             <span class="badge bg-info">{{ s.duration_hours }} ساعة</span>
                             {% endif %}
+                            {% if user.role == 'admin' %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm mt-1 py-0 px-1"
+                                    data-bs-toggle="modal" data-bs-target="#editTimeModal{{ s.id }}" title="تعديل الفترة">
+                                <i class="bi bi-clock-history" style="font-size:.75rem;"></i>
+                            </button>
+                            {% endif %}
                         </td>
                         <td>
                             <span class="badge {% if s.status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
@@ -79,16 +85,11 @@
                         <td>
                             <div class="d-flex gap-1">
                                 {% if user.role == 'admin' %}
-                                {% if s.status == 'active' %}
                                 <a href="/admin/entry/{{ s.id }}" class="btn btn-sm btn-primary" title="إدخال بيانات">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
                                 <a href="/admin/breaking-news/{{ s.id }}" class="btn btn-sm btn-danger" title="إضافة خبر عاجل">
                                     <i class="bi bi-lightning-charge-fill"></i>
-                                </a>
-                                {% endif %}
-                                <a href="/admin/entries/{{ s.id }}" class="btn btn-sm btn-info" title="عرض البيانات">
-                                    <i class="bi bi-eye"></i>
                                 </a>
                                 <form method="post" action="/admin/generate-report/{{ s.id }}">
                                     <button type="submit" class="btn btn-sm btn-success" title="إنشاء تقرير">
@@ -98,6 +99,11 @@
                                 <a href="/admin/reports/{{ s.id }}" class="btn btn-sm btn-warning" title="التقارير">
                                     <i class="bi bi-download"></i>
                                 </a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        title="نسخ رابط المشاركة"
+                                        onclick="copyShareLink('{{ request.url.scheme }}://{{ request.url.netloc }}/public/{{ s.id }}', this)">
+                                    <i class="bi bi-link-45deg"></i>
+                                </button>
                                 {% else %}
                                 {% if s.status == 'active' %}
                                 <a href="/user/entry/{{ s.id }}" class="btn btn-sm btn-primary" title="إدخال بيانات">
@@ -122,4 +128,53 @@
         {% endif %}
     </div>
 </div>
+
+{% if user.role == 'admin' %}
+{% for s in sessions %}
+<div class="modal fade" id="editTimeModal{{ s.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="/admin/update-session-time/{{ s.id }}">
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title mb-0"><i class="bi bi-clock me-1"></i>تعديل فترة الجلسة</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">وقت البداية</label>
+                        <input type="datetime-local" name="start_at" class="form-control"
+                               value="{{ s.start_at.strftime('%Y-%m-%dT%H:%M') if s.start_at else '' }}" required>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-bold">وقت النهاية</label>
+                        <input type="datetime-local" name="deadline_at" class="form-control"
+                               value="{{ s.deadline_at.strftime('%Y-%m-%dT%H:%M') if s.deadline_at else '' }}" required>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<script>
+function copyShareLink(url, btn) {
+    navigator.clipboard.writeText(url).then(function () {
+        var icon = btn.querySelector('i');
+        icon.className = 'bi bi-check-lg';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        setTimeout(function () {
+            icon.className = 'bi bi-link-45deg';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 2000);
+    });
+}
+</script>
 {% endblock %}

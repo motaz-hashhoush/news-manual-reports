@@ -390,9 +390,9 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
 
     headers = [
         "التوقيت", "العنوان", "البرنامج", "التوزيع",
-        "النوع", "الضيف/المراسل", "رابط النشر",
+        "النوع", "الضيف/المراسل", "المدة الزمنية", "رابط النشر",
     ]
-    col_widths = [2.8, 8.5, 3.0, 2.2, 2.0, 4.0, 4.2]
+    col_widths = [2.5, 7.5, 2.8, 2.0, 1.8, 3.5, 2.0, 4.2]
 
     table5 = doc.add_table(rows=1 + len(entries), cols=len(headers))
     table5.style = "Table Grid"
@@ -422,7 +422,8 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         row.cells[3].text = entry.distribution or ""
         row.cells[4].text = entry.entry_type or ""
         row.cells[5].text = entry.guest_reporter_name or ""
-        row.cells[6].text = link_display
+        row.cells[6].text = entry.clip_duration or ""
+        row.cells[7].text = link_display
 
         for cell in row.cells:
             _set_cell_rtl(cell)

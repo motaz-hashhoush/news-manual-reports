@@ -56,6 +56,7 @@ class DataEntry(Base):
     guest_reporter_name = Column(String(255), nullable=True)   # اسم الضيف/المراسل
     publish_link = Column(Text, nullable=True)                 # رابط النشر
     importance = Column(String(100), nullable=True)            # الأهمية
+    clip_duration = Column(String(50), nullable=True)          # المدة الزمنية للمقطع
     screenshot_path = Column(String(500), nullable=True)       # برنت سكرين
     screenshot_data = Column(LargeBinary, nullable=True)
 
@@ -78,6 +79,15 @@ class BreakingNews(Base):
 
     session = relationship("ReportSession", back_populates="breaking_news_items")
     user = relationship("User", back_populates="breaking_news_items")
+
+
+class LookupValue(Base):
+    __tablename__ = "lookup_values"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(50), nullable=False, index=True)
+    name = Column(String(300), nullable=False)
+    created_at = Column(DateTime, default=now_palestine)
 
 
 class GeneratedReport(Base):
