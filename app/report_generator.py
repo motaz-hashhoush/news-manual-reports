@@ -347,7 +347,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         corr_data = []
         for name, count in unique_correspondents.most_common():
             sample = next((e for e in correspondents if e.guest_reporter_name == name), None)
-            topic = sample.title[:60] if sample else "—"
+            topic = sample.title if sample and sample.title else "—"            
             corr_data.append((name, count, topic))
 
         t_corr = doc.add_table(rows=1 + len(corr_data), cols=4)
@@ -376,8 +376,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         seen_guests = {}
         for e in guests:
             if e.guest_reporter_name not in seen_guests:
-                seen_guests[e.guest_reporter_name] = e.title[:80] if e.title else "—"
-
+                seen_guests[e.guest_reporter_name] = e.title if e.title else "—"
         t_guest = doc.add_table(rows=1 + len(seen_guests), cols=3)
         t_guest.style = "Table Grid"
         t_guest.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -407,7 +406,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         t_off.rows[0].cells[2].text = "المسؤول"
         _style_header_row(t_off.rows[0])
         for i, e in enumerate(officials, 1):
-            t_off.rows[i].cells[0].text = (e.title or "—")[:80]
+            t_off.rows[i].cells[0].text = e.title or "—"            
             t_off.rows[i].cells[1].text = "—"
             t_off.rows[i].cells[2].text = e.guest_reporter_name or "—"
         _style_table_body(t_off)
@@ -481,7 +480,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                     row.cells[0].text = guest_cell
                     row.cells[1].text = entry.distribution or "—"
                     row.cells[2].text = entry.entry_type or "—"
-                    row.cells[3].text = (entry.title or "—")[:70]
+                    row.cells[3].text = entry.title or "—"      
                     row.cells[4].text = _format_entry_timing(entry, include_date=True)
                     row.cells[5].text = str(global_idx)
                     global_idx += 1
@@ -537,7 +536,7 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                 row.cells[0].text = guest_cell
                 row.cells[1].text = entry.distribution or "—"
                 row.cells[2].text = entry.entry_type or "—"
-                row.cells[3].text = (entry.title or "—")[:70]
+                row.cells[3].text = entry.title or "—"                
                 row.cells[4].text = entry.monitoring_time or "—"
                 row.cells[5].text = str(global_idx)
                 global_idx += 1
@@ -564,12 +563,11 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                 t_pub.rows[i].cells[0].text = "X/Twitter"
             else:
                 t_pub.rows[i].cells[0].text = "رابط"
-            t_pub.rows[i].cells[1].text = (e.title or "—")[:60]
+            t_pub.rows[i].cells[1].text = (e.title or "—")
             t_pub.rows[i].cells[2].text = _format_entry_timing(e, include_date=is_custom)
         _style_table_body(t_pub)
     else:
         _add_paragraph(doc, "لا توجد مواد منشورة رقمياً في هذه الفترة", justify=True)
-
     doc.add_paragraph("")
 
     # ── Screenshots ──
