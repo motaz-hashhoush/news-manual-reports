@@ -1,0 +1,478 @@
+{% extends "base.html" %}
+
+{% block title %}تقرير مخصص — نظام التقارير{% endblock %}
+
+{% block extra_css %}
+<style>
+    .custom-report-header {
+        background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+    }
+    
+    .custom-report-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .form-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    
+    .form-card-header {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+        padding: 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .form-card-header h3 {
+        margin: 0;
+        color: #1a237e;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-card-body {
+        padding: 2rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group:last-child {
+        margin-bottom: 0;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: #1a237e;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-control {
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .form-control:focus {
+        border-color: #1565c0;
+        box-shadow: 0 0 0 0.2rem rgba(21, 101, 192, 0.25);
+    }
+    
+    .date-time-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .date-time-group {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .button-group {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .btn-generate {
+        background: linear-gradient(135deg, #1a237e 0%, #1565c0 100%);
+        border: none;
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 6px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+    
+    .btn-generate:hover {
+        background: linear-gradient(135deg, #0d1b6e 0%, #0d47a1 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(26, 35, 126, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+    
+    .btn-reset {
+        background: #6c757d;
+        border: none;
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 6px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+    
+    .btn-reset:hover {
+        background: #5a6268;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+    
+    .alert {
+        border-radius: 6px;
+        border: none;
+        margin-bottom: 1.5rem;
+    }
+    
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .alert-info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border-radius: 6px;
+        border: none;
+        margin-bottom: 1.5rem;
+    }
+    
+    .preset-buttons {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn-preset {
+        background: white;
+        border: 2px solid #1a237e;
+        color: #1a237e;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+    }
+    
+    .btn-preset:hover {
+        background: #1a237e;
+        color: white;
+        transform: translateY(-2px);
+    }
+    
+    .btn-preset:active {
+        transform: translateY(0);
+    }
+    
+    .date-range-preview {
+        background: #e8f5e9;
+        border-right: 4px solid #4caf50;
+        padding: 1rem 1.25rem;
+        border-radius: 6px;
+        margin-bottom: 1.5rem;
+        display: none;
+    }
+    
+    .date-range-preview.show {
+        display: block;
+    }
+    
+    .date-range-preview strong {
+        color: #2e7d32;
+        font-size: 1rem;
+    }
+    
+    .date-range-preview .duration-details {
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+        color: #388e3c;
+    }
+    
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .form-section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1a237e;
+        margin: 1.5rem 0 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-section-title:first-child {
+        margin-top: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="custom-report-header">
+    <h1>
+        <i class="bi bi-file-earmark-pdf"></i>
+        توليد تقرير مخصص
+    </h1>
+    <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">قم بتوليد تقرير شامل لأي فترة زمنية محددة</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="form-card">
+            <div class="form-card-header">
+                <h3>
+                    <i class="bi bi-calendar-range"></i>
+                    تحديد الفترة الزمنية
+                </h3>
+            </div>
+            <div class="form-card-body">
+                {% if error %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle me-2"></i>
+                    {{ error }}
+                </div>
+                {% endif %}
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    استخدم الأزرار السريعة أدناه أو حدد الفترة الزمنية يدوياً
+                </div>
+
+                <div class="preset-buttons">
+                    <button type="button" class="btn-preset" onclick="setPreset('today')">
+                        <i class="bi bi-calendar-day me-1"></i>
+                        اليوم
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setPreset('yesterday')">
+                        <i class="bi bi-calendar-minus me-1"></i>
+                        أمس
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setPreset('last24h')">
+                        <i class="bi bi-clock-history me-1"></i>
+                        آخر 24 ساعة
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setPreset('last7days')">
+                        <i class="bi bi-calendar-week me-1"></i>
+                        آخر 7 أيام
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setPreset('last30days')">
+                        <i class="bi bi-calendar-month me-1"></i>
+                        آخر 30 يوم
+                    </button>
+                </div>
+
+                <div id="dateRangePreview" class="date-range-preview">
+                    <div>
+                        <strong><i class="bi bi-hourglass-split me-1"></i>المدة المحددة:</strong> 
+                        <span id="previewText"></span>
+                    </div>
+                    <div class="duration-details" id="durationDetails"></div>
+                </div>
+
+                <form id="customReportForm" method="post" action="/user/custom-report">
+                    <div class="form-section-title">
+                        <i class="bi bi-calendar-check"></i>
+                        الفترة الزمنية
+                    </div>
+                    
+                    <div class="date-time-group">
+                        <div class="form-group">
+                            <label class="form-label">البداية (تاريخ ووقت)</label>
+                            <input type="datetime-local" id="startAt" name="start_at" class="form-control" required>
+                            <div class="help-text">
+                                <i class="bi bi-calendar3"></i>
+                                اختر تاريخ ووقت البداية
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">النهاية (تاريخ ووقت)</label>
+                            <input type="datetime-local" id="endAt" name="end_at" class="form-control" required>
+                            <div class="help-text">
+                                <i class="bi bi-clock"></i>
+                                اختر تاريخ ووقت النهاية
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn-generate">
+                            <i class="bi bi-download"></i>
+                            توليد وتحميل التقرير
+                        </button>
+                        <button type="reset" class="btn-reset">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            إعادة تعيين
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function setPreset(type) {
+    let startDt = new Date();
+    let endDt = new Date();
+    
+    switch(type) {
+        case 'today':
+            startDt.setHours(0, 0, 0, 0);
+            endDt.setHours(23, 59, 0, 0);
+            break;
+        case 'yesterday':
+            startDt.setDate(startDt.getDate() - 1);
+            startDt.setHours(0, 0, 0, 0);
+            endDt.setDate(endDt.getDate() - 1);
+            endDt.setHours(23, 59, 0, 0);
+            break;
+        case 'last24h':
+            startDt.setHours(startDt.getHours() - 24);
+            break;
+        case 'last7days':
+            startDt.setDate(startDt.getDate() - 7);
+            startDt.setHours(0, 0, 0, 0);
+            endDt.setHours(23, 59, 0, 0);
+            break;
+        case 'last30days':
+            startDt.setDate(startDt.getDate() - 30);
+            startDt.setHours(0, 0, 0, 0);
+            endDt.setHours(23, 59, 0, 0);
+            break;
+    }
+    
+    document.getElementById('startAt').value = formatDateTimeLocal(startDt);
+    document.getElementById('endAt').value = formatDateTimeLocal(endDt);
+    
+    updatePreview();
+}
+
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function updatePreview() {
+    const startAt = document.getElementById('startAt').value;
+    const endAt = document.getElementById('endAt').value;
+    
+    if (startAt && endAt) {
+        const start = new Date(startAt);
+        const end = new Date(endAt);
+        
+        if (end <= start) {
+            document.getElementById('previewText').textContent = 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية';
+            document.getElementById('dateRangePreview').style.background = '#ffebee';
+            document.getElementById('dateRangePreview').style.borderRightColor = '#e53935';
+            document.getElementById('dateRangePreview').classList.add('show');
+            return;
+        }
+        
+        document.getElementById('dateRangePreview').style.background = '#e8f5e9';
+        document.getElementById('dateRangePreview').style.borderRightColor = '#4caf50';
+        
+        const diffMs = end - start;
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+        const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        
+        let durationText = '';
+        if (diffDays > 0) {
+            durationText = `${diffDays} يوم`;
+            const remainingHours = diffHours % 24;
+            if (remainingHours > 0) {
+                durationText += ` و ${remainingHours} ساعة`;
+            }
+        } else if (diffHours > 0) {
+            durationText = `${diffHours} ساعة`;
+            if (diffMinutes > 0) {
+                durationText += ` و ${diffMinutes} دقيقة`;
+            }
+        } else {
+            durationText = `${diffMinutes} دقيقة`;
+        }
+        
+        const startFormatted = start.toLocaleDateString('ar-SA') + ' - ' + start.toLocaleTimeString('ar-SA', {hour: '2-digit', minute: '2-digit'});
+        const endFormatted = end.toLocaleDateString('ar-SA') + ' - ' + end.toLocaleTimeString('ar-SA', {hour: '2-digit', minute: '2-digit'});
+        
+        document.getElementById('previewText').textContent = durationText;
+        document.getElementById('durationDetails').innerHTML = 
+            `<i class="bi bi-arrow-left-right me-1"></i>من ${startFormatted} إلى ${endFormatted}`;
+        document.getElementById('dateRangePreview').classList.add('show');
+    } else {
+        document.getElementById('dateRangePreview').classList.remove('show');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('customReportForm');
+    const inputs = form.querySelectorAll('input[type="datetime-local"]');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', updatePreview);
+        input.addEventListener('input', updatePreview);
+    });
+    
+    form.addEventListener('submit', function(e) {
+        const startAt = document.getElementById('startAt').value;
+        const endAt = document.getElementById('endAt').value;
+        
+        if (!startAt || !endAt) {
+            e.preventDefault();
+            alert('الرجاء ملء جميع الحقول المطلوبة');
+            return;
+        }
+        
+        const start = new Date(startAt);
+        const end = new Date(endAt);
+        
+        if (end <= start) {
+            e.preventDefault();
+            alert('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
+            return;
+        }
+        
+    });
+    
+    document.getElementById('customReportForm').addEventListener('reset', function() {
+        document.getElementById('dateRangePreview').classList.remove('show');
+    });
+
+});
+</script>
+
+{% endblock %}

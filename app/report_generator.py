@@ -1,22 +1,23 @@
 import io
 import os
-from collections import Counter
+import re
+from collections import Counter, defaultdict
 from datetime import datetime
 
 from docx import Document
 from app.timezone import now_palestine
-from docx.shared import Inches, Pt, Cm, RGBColor, Emu
+from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn
 
 from app.config import UPLOAD_DIR
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
+
+FONT_NAME = "Arial"
 
 ARABIC_MONTHS = {
     1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
@@ -24,28 +25,27 @@ ARABIC_MONTHS = {
     9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
 }
 
-DIST_NARRATIVE_LABELS = {
-    "ضيف": "مادة ضيف",
-    "مراسل": "مادة مراسلين",
-    "تقرير": "تقارير",
-    "فيلر": "فيلر",
-    "مذيع": "مادة مذيع",
-    "عاجل": "مادة عاجلة",
-    "مسؤول": "مادة لمسؤولين كبار",
-    "وول": "وول",
-    "تحليل": "تحليل",
+ARABIC_HOURS = {
+    1: "الأولى", 2: "الثانية", 3: "الثالثة", 4: "الرابعة",
+    5: "الخامسة", 6: "السادسة", 7: "السابعة", 8: "الثامنة",
+    9: "التاسعة", 10: "العاشرة", 11: "الحادية عشرة", 12: "الثانية عشرة",
+    13: "الثالثة عشرة", 14: "الرابعة عشرة", 15: "الخامسة عشرة",
+    16: "السادسة عشرة", 17: "السابعة عشرة", 18: "الثامنة عشرة",
+    19: "التاسعة عشرة", 20: "العشرون", 21: "الحادية والعشرون",
+    22: "الثانية والعشرون", 23: "الثالثة والعشرون",
+    24: "الرابعة والعشرون",
 }
 
-DIST_PCT_LABELS = {
-    "مذيع": "أخبار المذيعين",
-    "ضيف": "الضيوف",
-    "مراسل": "المراسلين",
-    "عاجل": "الأخبار العاجلة",
-    "فيلر": "الفيلرز",
-    "مسؤول": "المسؤولين الكبار",
-    "تقرير": "التقارير",
-    "وول": "الوول",
-    "تحليل": "التحليل",
+DIST_DESCRIPTIONS = {
+    "مذيع": "تقديم الأخبار المتجددة والعاجلة والتطورات اللحظية",
+    "مراسل": "مداخلات ميدانية حيّة من مواقع مختلفة",
+    "ضيف": "لقاءات تحليلية متخصصة",
+    "مسؤول": "تصريحات مباشرة لمسؤولين كبار",
+    "وول": "مواد تحليلية شاملة ومعمّقة",
+    "فيلر": "مواد تفسيرية مصوّرة",
+    "تقرير": "تقارير ميدانية مصوّرة",
+    "عاجل": "أخبار عاجلة ذات أولوية قصوى",
+    "تحليل": "مواد تحليلية",
 }
 
 
@@ -53,11 +53,7 @@ def _set_cell_shading(cell, color_hex: str):
     shading = cell._element.get_or_add_tcPr()
     shading_elm = shading.makeelement(
         qn("w:shd"),
-        {
-            qn("w:val"): "clear",
-            qn("w:color"): "auto",
-            qn("w:fill"): color_hex,
-        },
+        {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): color_hex},
     )
     shading.append(shading_elm)
 
@@ -71,281 +67,517 @@ def _style_header_row(row, bg_color="1F4E79"):
                 run.font.color.rgb = RGBColor(255, 255, 255)
                 run.font.bold = True
                 run.font.size = Pt(10)
+                run.font.name = FONT_NAME
+                _set_run_rtl_font(run)
 
 
 def _set_cell_rtl(cell):
-    """Set RTL direction on a table cell so Arabic text flows correctly."""
     for paragraph in cell.paragraphs:
         pPr = paragraph._element.get_or_add_pPr()
         bidi = pPr.makeelement(qn("w:bidi"), {})
         pPr.append(bidi)
 
 
-def _set_col_widths(table, widths_cm):
-    """Set explicit column widths on a table."""
-    table.autofit = False
-    for row in table.rows:
-        for idx, width in enumerate(widths_cm):
-            if idx < len(row.cells):
-                row.cells[idx].width = Cm(width)
+def _set_run_rtl_font(run):
+    rPr = run._element.get_or_add_rPr()
+    cs = rPr.makeelement(qn("w:rFonts"), {qn("w:cs"): FONT_NAME})
+    rPr.append(cs)
+
+
+def _add_paragraph(doc, text="", bold=False, size=None, alignment=None, justify=False, font=FONT_NAME):
+    p = doc.add_paragraph()
+    if justify:
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    elif alignment is not None:
+        p.alignment = alignment
+    pPr = p._element.get_or_add_pPr()
+    bidi = pPr.makeelement(qn("w:bidi"), {})
+    pPr.append(bidi)
+    if text:
+        run = p.add_run(text)
+        run.font.bold = bold
+        run.font.name = font
+        _set_run_rtl_font(run)
+        if size:
+            run.font.size = Pt(size)
+    return p
+
+
+def _add_mixed_paragraph(doc, parts, alignment=None, justify=False):
+    """Add a paragraph with mixed bold/normal runs.
+    parts: list of (text, bold) tuples.
+    """
+    p = doc.add_paragraph()
+    if justify:
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    elif alignment is not None:
+        p.alignment = alignment
+    pPr = p._element.get_or_add_pPr()
+    bidi = pPr.makeelement(qn("w:bidi"), {})
+    pPr.append(bidi)
+    for text, bold in parts:
+        run = p.add_run(text)
+        run.font.bold = bold
+        run.font.name = FONT_NAME
+        _set_run_rtl_font(run)
+    return p
 
 
 def _format_arabic_dt(dt):
     hour = dt.hour
-    if hour >= 12:
-        period = "مساءً"
-        display_hour = hour - 12 if hour > 12 else 12
-    else:
-        period = "صباحًا"
-        display_hour = hour if hour > 0 else 12
+    period = "مساءً" if hour >= 12 else "صباحًا"
+    display_hour = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
+    if hour == 12:
+        display_hour = 12
     minute = dt.minute
     month = ARABIC_MONTHS.get(dt.month, str(dt.month))
-    time_str = str(display_hour)
-    if minute:
-        time_str += f":{minute:02d}"
-    return f"{time_str} {period} يوم {dt.day} {month} {dt.year}"
+    time_str = f"{display_hour:02d}:{minute:02d}"
+    return f"{time_str} {period}", f"{dt.day} {month} {dt.year}"
 
 
-def _add_rtl_paragraph(doc, text, bold=False, size=12, alignment=WD_ALIGN_PARAGRAPH.RIGHT):
-    p = doc.add_paragraph()
-    p.alignment = alignment
-    pPr = p._element.get_or_add_pPr()
-    bidi = pPr.makeelement(qn("w:bidi"), {})
-    pPr.append(bidi)
-    run = p.add_run(text)
-    run.font.size = Pt(size)
-    run.font.bold = bold
-    return p
+def _parse_entry_hour(monitoring_time):
+    """Parse monitoring_time like '07:03 PM' into a sortable hour key and display range."""
+    if not monitoring_time:
+        return None, None
+    m = re.match(r"(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?", monitoring_time.strip())
+    if not m:
+        return None, None
+    hour = int(m.group(1))
+    ampm = (m.group(4) or "").upper()
+    if ampm == "PM" and hour != 12:
+        hour += 12
+    elif ampm == "AM" and hour == 12:
+        hour = 0
+    suffix = "AM" if hour < 12 else "PM"
+    display_h = hour % 12 or 12
+    start = f"{display_h:02d}:00 {suffix}"
+    end_h = (hour + 1) % 24
+    end_suffix = "AM" if end_h < 12 else "PM"
+    end_display = end_h % 12 or 12
+    end = f"{end_display:02d}:59 {end_suffix}"
+    return hour, f"{start} – {end}"
+
+
+def _format_entry_timing(entry, include_date=False):
+    base_time = getattr(entry, "monitoring_time", None) or "—"
+    if not include_date:
+        return base_time
+
+    created_at = getattr(entry, "created_at", None)
+    if not created_at:
+        return base_time
+
+    _, arabic_date = _format_arabic_dt(created_at)
+    return f"{base_time} | {arabic_date}"
+
+
+def _style_table_body(table, font_size=9):
+    for i, row in enumerate(table.rows):
+        if i == 0:
+            continue
+        for cell in row.cells:
+            _set_cell_rtl(cell)
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                for run in paragraph.runs:
+                    run.font.size = Pt(font_size)
+                    run.font.name = FONT_NAME
+                    _set_run_rtl_font(run)
 
 
 def generate_docx_report(report_session, entries, breaking_news_count: int = 0) -> str:
     doc = Document()
 
     style = doc.styles["Normal"]
-    style.font.name = "Arial"
+    style.font.name = FONT_NAME
     style.font.size = Pt(11)
+    style_element = style.element
+    rPr = style_element.get_or_add_rPr()
+    rFonts = rPr.makeelement(qn("w:rFonts"), {qn("w:cs"): FONT_NAME})
+    rPr.append(rFonts)
 
-    _add_rtl_paragraph(
-        doc,
-        "تقرير التغطية الإخبارية – قناة الشرق للأخبار",
-        bold=True,
-        size=18,
-        alignment=WD_ALIGN_PARAGRAPH.CENTER,
-    )
-    _add_rtl_paragraph(
-        doc,
-        report_session.name,
-        bold=True,
-        size=14,
-        alignment=WD_ALIGN_PARAGRAPH.CENTER,
-    )
-    _add_rtl_paragraph(
-        doc,
-        f"تاريخ التقرير: {now_palestine().strftime('%Y-%m-%d %H:%M')}",
-        size=11,
-        alignment=WD_ALIGN_PARAGRAPH.CENTER,
-    )
-
-    doc.add_paragraph("")
-
-    total_entries = len(entries)
+    total = len(entries)
     dist_counter = Counter(e.distribution for e in entries if e.distribution)
     type_counter = Counter(e.entry_type for e in entries if e.entry_type)
     program_counter = Counter(e.program for e in entries if e.program)
-    published = sum(1 for e in entries if e.publish_link and e.publish_link.strip() and "لم ينشر" not in e.publish_link)
-    not_published = total_entries - published
+    published_entries = [e for e in entries if e.publish_link and e.publish_link.strip() and "لم ينشر" not in e.publish_link]
+    published = len(published_entries)
+    correspondents = [e for e in entries if e.distribution == "مراسل" and e.guest_reporter_name]
+    guests = [e for e in entries if e.distribution == "ضيف" and e.guest_reporter_name]
+    officials = [e for e in entries if e.distribution == "مسؤول" and e.guest_reporter_name]
+    unique_correspondents = Counter(e.guest_reporter_name for e in correspondents)
+    unique_guests = Counter(e.guest_reporter_name for e in guests)
+    filler_wall_count = dist_counter.get("فيلر", 0) + dist_counter.get("وول", 0)
+    report_count = dist_counter.get("تقرير", 0)
 
-    # --- Narrative summary ---
+    # ── COVER ──
+    doc.add_paragraph("")
+    _add_paragraph(doc, "تقرير الرصد والتحليل الشامل", bold=True, size=16,
+                   alignment=WD_ALIGN_PARAGRAPH.CENTER)
+    _add_paragraph(doc, "التغطية الإخبارية المتواصلة — قناة الشرق", bold=True, size=16,
+                   alignment=WD_ALIGN_PARAGRAPH.CENTER)
+
+    desc = report_session.description or "[يُعبّأ يدويًا: عنوان الحدث / الموضوع الرئيسي]"
+    _add_paragraph(doc, desc, bold=True, size=16, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+
     if report_session.start_at and report_session.deadline_at:
-        period_from = _format_arabic_dt(report_session.start_at)
-        period_to = _format_arabic_dt(report_session.deadline_at)
-        period_text = f"من {period_from} حتى {period_to}"
+        start_dt = report_session.start_at
+        end_dt = report_session.deadline_at
+        month = ARABIC_MONTHS.get(start_dt.month, str(start_dt.month))
+        if start_dt.day == end_dt.day:
+            date_str = f"{start_dt.day} {month} {start_dt.year}"
+        else:
+            date_str = f"{start_dt.day}- {end_dt.day} {month} {start_dt.year}"
+        start_time, _ = _format_arabic_dt(start_dt)
+        end_time, _ = _format_arabic_dt(end_dt)
+        period_str = f"من الساعة {start_time} وحتى الساعة {end_time}"
+        if start_dt.day != end_dt.day:
+            period_str += " من اليوم التالي"
+        diff_hours = int((end_dt - start_dt).total_seconds() / 3600)
     else:
-        period_text = "خلال فترة الجلسة"
+        date_str = now_palestine().strftime("%Y-%m-%d")
+        period_str = "خلال فترة الجلسة"
+        diff_hours = getattr(report_session, "duration_hours", 24) or 24
 
-    desc_context = report_session.description or "التطورات الإخبارية"
+    _add_mixed_paragraph(doc, [("التاريخ", True), (f" {date_str}", False)])
+    _add_mixed_paragraph(doc, [("فترة الرصد", True), (": ", True), (f" {period_str}", False)])
+    _add_mixed_paragraph(doc, [("إجمالي البث المتواصل", True), (": ", True),
+                               (f"نحو {diff_hours} ساعة متواصلة", False)])
 
-    _add_rtl_paragraph(
-        doc,
-        f"يرصد هذا التقرير التغطية الإخبارية التي بثّتها الشرق للأخبار خلال الفترة الزمنية "
-        f"الممتدة {period_text}، "
-        f"وذلك في سياق متابعة التطورات المرتبطة بـ {desc_context}.",
-        size=11,
-    )
-
-    _add_rtl_paragraph(
-        doc,
-        "ويهدف التقرير إلى تقديم قراءة تحليلية شاملة للمحتوى الإعلامي الذي ظهر على الشاشة، "
-        "من خلال توثيق المواد التي تم بثّها وتحليل طبيعة التغطية من حيث الموضوعات المطروحة، "
-        "مصادر المعلومات، أشكال التقديم التلفزيوني، إضافة إلى متابعة انتقال المحتوى من البث "
-        "التلفزيوني إلى المنصات الرقمية التابعة للقناة.",
-        size=11,
-    )
-
-    dist_parts = []
-    for dist, count in dist_counter.most_common():
-        label = DIST_NARRATIVE_LABELS.get(dist, dist)
-        dist_parts.append(f"{count} {label}")
-    dist_text = "، ".join(dist_parts)
-
-    stats_para = f"خلال الفترة المرصودة تم تسجيل {total_entries} مادة إعلامية ظهرت على الشاشة"
-    if dist_text:
-        stats_para += f"، توزعت بين {dist_text}."
-    else:
-        stats_para += "."
-    _add_rtl_paragraph(doc, stats_para, size=11)
-
-    _add_rtl_paragraph(
-        doc,
-        f"كما أظهر الرصد أن {published} مادة من إجمالي المواد التي ظهرت على الشاشة تم نشرها "
-        f"لاحقًا عبر المنصات الرقمية التابعة للقناة، في حين بقيت {not_published} مادة ضمن البث "
-        "التلفزيوني دون نشر رقمي حتى وقت إعداد التقرير.",
-        size=11,
-    )
-
-    _add_rtl_paragraph(
-        doc,
-        "وتوزعت أشكال التقديم الإعلامي خلال الفترة المرصودة بين تقديم المذيع داخل الاستوديو، "
-        "ومداخلات المراسلين من مواقع مختلفة، واستضافة خبراء ومحللين، إضافة إلى استخدام مواد "
-        "تفسيرية ومرئية تهدف إلى تبسيط سياق الأحداث وتقديم خلفية تحليلية للمشاهد.",
-        size=11,
-    )
-
-    sorted_dist = dist_counter.most_common()
-    if sorted_dist and total_entries:
-        top_dist, top_count = sorted_dist[0]
-        top_pct = top_count / total_entries * 100
-        top_label = DIST_PCT_LABELS.get(top_dist, top_dist)
-
-        pct_text = (
-            f"وتشير بيانات الرصد إلى أن {top_label} شكّلت النسبة الأكبر من إجمالي المواد "
-            f"المعروضة، بنسبة {top_pct:.2f}%"
-        )
-
-        if len(sorted_dist) > 1:
-            rest_parts = []
-            for dist, count in sorted_dist[1:]:
-                pct = count / total_entries * 100
-                label = DIST_PCT_LABELS.get(dist, dist)
-                rest_parts.append(f"{label} بنسبة {pct:.2f}%")
-            pct_text += "، يليه " + " و".join(rest_parts)
-
-        pct_text += "."
-        _add_rtl_paragraph(doc, pct_text, size=11)
-
-    doc.add_paragraph("")
-    doc.add_page_break()
-
-    # --- Table 1: Program breakdown ---
-    _add_rtl_paragraph(doc, "بطاقة التغطية", bold=True, size=13)
-    table1 = doc.add_table(rows=1 + len(program_counter), cols=2)
-    table1.style = "Table Grid"
-    table1.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr = table1.rows[0]
-    hdr.cells[0].text = "نوع التغطية (اسم البرنامج)"
-    hdr.cells[1].text = "العدد"
-    _style_header_row(hdr)
-
-    for i, (program, count) in enumerate(program_counter.most_common(), 1):
-        table1.rows[i].cells[0].text = program
-        table1.rows[i].cells[1].text = str(count)
-    for row in table1.rows:
-        for cell in row.cells:
-            _set_cell_rtl(cell)
+    programs_list = " | ".join(program_counter.keys()) if program_counter else "—"
+    _add_mixed_paragraph(doc, [("البرامج المشمولة", True), (": ", True), (programs_list, False)])
 
     doc.add_paragraph("")
 
-    # --- Table 2: Publication summary ---
-    _add_rtl_paragraph(doc, "ملخص النشر", bold=True, size=13)
-    table2 = doc.add_table(rows=4, cols=2)
-    table2.style = "Table Grid"
-    table2.alignment = WD_TABLE_ALIGNMENT.CENTER
+    # ── الملخص التنفيذي ──
+    _add_paragraph(doc, "الملخص التنفيذي", bold=True, size=10)
 
-    hdr2 = table2.rows[0]
-    hdr2.cells[0].text = "ملخص النشر"
-    hdr2.cells[1].text = ""
-    _style_header_row(hdr2)
+    summary = (
+        f"يرصد هذا التقرير {total} مادة إخبارية بثّتها قناة الشرق على مدار نحو "
+        f"{diff_hours} ساعة متواصلة. "
+    )
+    if dist_counter:
+        parts = []
+        for d, c in dist_counter.most_common():
+            parts.append(f"{c} مادة {d}")
+        summary += "توزعت المواد بين: " + "، ".join(parts) + ". "
+    if published:
+        summary += f"تم نشر {published} مادة عبر المنصات الرقمية. "
+    if breaking_news_count:
+        summary += f"رُصد {breaking_news_count} خبر عاجل خلال الفترة."
 
-    table2.rows[1].cells[0].text = "إجمالي مواد البث"
-    table2.rows[1].cells[1].text = str(total_entries)
-    table2.rows[2].cells[0].text = "منشور على السوشيال ميديا"
-    table2.rows[2].cells[1].text = str(published)
-    table2.rows[3].cells[0].text = "لم يُنشر بعد"
-    table2.rows[3].cells[1].text = str(not_published)
-    for row in table2.rows:
-        for cell in row.cells:
-            _set_cell_rtl(cell)
+    _add_paragraph(doc, summary, justify=True)
+
+    _add_paragraph(doc,
+        "[يُعبّأ يدويًا: فقرة تحليلية تتناول أبرز محاور التغطية والسياق العام للأحداث]",
+        justify=True)
 
     doc.add_paragraph("")
 
-    # --- Table 3: Distribution stats ---
-    _add_rtl_paragraph(doc, "توزيع أشكال التقديم", bold=True, size=13)
+    # ── المؤشرات الرئيسية ──
+    _add_paragraph(doc, "المؤشرات الرئيسية", bold=True, size=10)
+
+    indicators = [
+        ("إجمالي المواد المبثوثة", f"{total} مادة"),
+        ("إجمالي ساعات البث المتواصل", f"≈ {diff_hours} ساعة"),
+        ("عدد مداخلات المراسلين والصحفيين", f"{len(correspondents)} مداخلة"),
+        ("عدد المراسلين", f"{len(unique_correspondents)} مراسلاً وصحفياً"),
+        ("عدد الضيوف والخبراء", f"{len(unique_guests)}+ خبيراً وضيفاً"),
+        ("المواد التحليلية (فيلر + وول)", f"{filler_wall_count} مادة"),
+        ("تصريحات كبار المسؤولين", f"{len(officials)} مادة"),
+        ("التقارير الميدانية المصوّرة", f"{report_count} تقارير"),
+    ]
+
+    t_ind = doc.add_table(rows=1 + len(indicators), cols=2)
+    t_ind.style = "Table Grid"
+    t_ind.alignment = WD_TABLE_ALIGNMENT.CENTER
+    t_ind.rows[0].cells[0].text = "القيمة"
+    t_ind.rows[0].cells[1].text = "المؤشر"
+    _style_header_row(t_ind.rows[0])
+    for i, (label, value) in enumerate(indicators, 1):
+        t_ind.rows[i].cells[0].text = value
+        t_ind.rows[i].cells[1].text = label
+    _style_table_body(t_ind)
+
+    doc.add_paragraph("")
+
+    # ── توزيع المواد حسب شكل التقديم ──
+    _add_paragraph(doc, "توزيع المواد حسب شكل التقديم", bold=True, size=10)
+
     dist_items = dist_counter.most_common()
-    table3 = doc.add_table(rows=1 + len(dist_items), cols=3)
-    table3.style = "Table Grid"
-    table3.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr3 = table3.rows[0]
-    hdr3.cells[0].text = "شكل التقديم/المصدر"
-    hdr3.cells[1].text = "العدد"
-    hdr3.cells[2].text = "النسبة %"
-    _style_header_row(hdr3)
-
-    dist_label_map = {
-        "ضيف": "عدد الضيوف",
-        "مراسل": "عدد المراسلين",
-        "تقرير": "عدد التقارير",
-        "فيلر": "عدد الفيلرز",
-        "مذيع": "أخبار مذيعين",
-        "عاجل": "عدد العواجل",
-        "مسؤول": "مسؤولون كبار",
-        "وول": "وول",
-        "تحليل": "تحليل",
-    }
-
+    t_dist = doc.add_table(rows=1 + len(dist_items), cols=3)
+    t_dist.style = "Table Grid"
+    t_dist.alignment = WD_TABLE_ALIGNMENT.CENTER
+    t_dist.rows[0].cells[0].text = "الوصف الوظيفي"
+    t_dist.rows[0].cells[1].text = "العدد"
+    t_dist.rows[0].cells[2].text = "شكل التقديم"
+    _style_header_row(t_dist.rows[0])
     for i, (dist, count) in enumerate(dist_items, 1):
-        pct = f"{(count / total_entries * 100):.2f}%" if total_entries else "0%"
-        table3.rows[i].cells[0].text = dist_label_map.get(dist, dist)
-        table3.rows[i].cells[1].text = str(count)
-        table3.rows[i].cells[2].text = pct
-    for row in table3.rows:
-        for cell in row.cells:
-            _set_cell_rtl(cell)
+        t_dist.rows[i].cells[0].text = DIST_DESCRIPTIONS.get(dist, "—")
+        t_dist.rows[i].cells[1].text = f"{count} مادة"
+        t_dist.rows[i].cells[2].text = dist
+    _style_table_body(t_dist)
 
     doc.add_paragraph("")
 
-    # --- Table 4: Type breakdown ---
-    _add_rtl_paragraph(doc, "التصنيف الموضوعي", bold=True, size=13)
+    # ── توزيع المواد حسب التصنيف الموضوعي ──
+    _add_paragraph(doc, "توزيع المواد حسب التصنيف الموضوعي", bold=True, size=10)
+
     type_items = type_counter.most_common()
-    table4 = doc.add_table(rows=1 + len(type_items), cols=3)
-    table4.style = "Table Grid"
-    table4.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr4 = table4.rows[0]
-    hdr4.cells[0].text = "التصنيف الموضوعي"
-    hdr4.cells[1].text = "العدد"
-    hdr4.cells[2].text = "النسبة"
-    _style_header_row(hdr4)
-
+    t_type = doc.add_table(rows=1 + len(type_items), cols=3)
+    t_type.style = "Table Grid"
+    t_type.alignment = WD_TABLE_ALIGNMENT.CENTER
+    t_type.rows[0].cells[0].text = "النسبة"
+    t_type.rows[0].cells[1].text = "العدد"
+    t_type.rows[0].cells[2].text = "التصنيف"
+    _style_header_row(t_type.rows[0])
     for i, (etype, count) in enumerate(type_items, 1):
-        pct = f"{(count / total_entries * 100):.2f}%" if total_entries else "0%"
-        table4.rows[i].cells[0].text = etype
-        table4.rows[i].cells[1].text = str(count)
-        table4.rows[i].cells[2].text = pct
-    for row in table4.rows:
-        for cell in row.cells:
-            _set_cell_rtl(cell)
+        pct = f"{(count / total * 100):.0f}%" if total else "0%"
+        t_type.rows[i].cells[0].text = pct
+        t_type.rows[i].cells[1].text = f"≈ {count} مادة"
+        t_type.rows[i].cells[2].text = etype
+    _style_table_body(t_type)
 
     doc.add_paragraph("")
 
-    # --- Screenshots section ---
+    # ── شبكة المراسلين والصحفيين ──
+    _add_paragraph(doc, "شبكة المراسلين والصحفيين", bold=True, size=10)
+
+    if unique_correspondents:
+        corr_data = []
+        for name, count in unique_correspondents.most_common():
+            sample = next((e for e in correspondents if e.guest_reporter_name == name), None)
+            topic = sample.title[:60] if sample else "—"
+            corr_data.append((name, count, topic))
+
+        t_corr = doc.add_table(rows=1 + len(corr_data), cols=4)
+        t_corr.style = "Table Grid"
+        t_corr.alignment = WD_TABLE_ALIGNMENT.CENTER
+        t_corr.rows[0].cells[0].text = "الملف الرئيسي"
+        t_corr.rows[0].cells[1].text = "عدد المداخلات"
+        t_corr.rows[0].cells[2].text = "الموقع"
+        t_corr.rows[0].cells[3].text = "المراسل/الصحفي"
+        _style_header_row(t_corr.rows[0])
+        for i, (name, count, topic) in enumerate(corr_data, 1):
+            t_corr.rows[i].cells[0].text = topic
+            t_corr.rows[i].cells[1].text = str(count)
+            t_corr.rows[i].cells[2].text = "—"
+            t_corr.rows[i].cells[3].text = name
+        _style_table_body(t_corr)
+    else:
+        _add_paragraph(doc, "لا يوجد مراسلون في هذه الفترة", justify=True)
+
+    doc.add_paragraph("")
+
+    # ── أبرز الضيوف والخبراء ──
+    _add_paragraph(doc, "أبرز الضيوف والخبراء", bold=True, size=10)
+
+    if guests:
+        seen_guests = {}
+        for e in guests:
+            if e.guest_reporter_name not in seen_guests:
+                seen_guests[e.guest_reporter_name] = e.title[:80] if e.title else "—"
+
+        t_guest = doc.add_table(rows=1 + len(seen_guests), cols=3)
+        t_guest.style = "Table Grid"
+        t_guest.alignment = WD_TABLE_ALIGNMENT.CENTER
+        t_guest.rows[0].cells[0].text = "الموضوع الرئيسي"
+        t_guest.rows[0].cells[1].text = "الصفة"
+        t_guest.rows[0].cells[2].text = "الضيف"
+        _style_header_row(t_guest.rows[0])
+        for i, (name, topic) in enumerate(seen_guests.items(), 1):
+            t_guest.rows[i].cells[0].text = topic
+            t_guest.rows[i].cells[1].text = "—"
+            t_guest.rows[i].cells[2].text = name
+        _style_table_body(t_guest)
+    else:
+        _add_paragraph(doc, "لا يوجد ضيوف في هذه الفترة", justify=True)
+
+    doc.add_paragraph("")
+
+    # ── أبرز تصريحات المسؤولين المبثوثة ──
+    _add_paragraph(doc, "أبرز تصريحات المسؤولين المبثوثة", bold=True, size=10)
+
+    if officials:
+        t_off = doc.add_table(rows=1 + len(officials), cols=3)
+        t_off.style = "Table Grid"
+        t_off.alignment = WD_TABLE_ALIGNMENT.CENTER
+        t_off.rows[0].cells[0].text = "أبرز ما جاء في التصريح"
+        t_off.rows[0].cells[1].text = "الصفة"
+        t_off.rows[0].cells[2].text = "المسؤول"
+        _style_header_row(t_off.rows[0])
+        for i, e in enumerate(officials, 1):
+            t_off.rows[i].cells[0].text = (e.title or "—")[:80]
+            t_off.rows[i].cells[1].text = "—"
+            t_off.rows[i].cells[2].text = e.guest_reporter_name or "—"
+        _style_table_body(t_off)
+    else:
+        _add_paragraph(doc, "لا يوجد تصريحات مسؤولين في هذه الفترة", justify=True)
+
+    doc.add_paragraph("")
+
+    is_custom = bool(getattr(report_session, "is_custom_report", False))
+
+    # ── العرض التفصيلي ساعة بساعة ──
+    _add_paragraph(doc, "العرض التفصيلي ساعة بساعة", bold=True, size=10)
+    doc.add_paragraph("")
+
+    if is_custom:
+        # Group by (date, hour) so multi-day reports get separate day sections
+        date_hourly = defaultdict(lambda: defaultdict(list))
+        for e in entries:
+            h, _ = _parse_entry_hour(e.monitoring_time)
+            entry_date = getattr(e, "created_at", None)
+            date_key = entry_date.date() if entry_date else None
+            date_hourly[date_key][h if h is not None else -1].append(e)
+
+        global_idx = 1
+        for date_key in sorted(date_hourly.keys(), key=lambda d: d or datetime.min.date()):
+            hours_map = date_hourly[date_key]
+            if date_key:
+                month = ARABIC_MONTHS.get(date_key.month, str(date_key.month))
+                date_label = f"{date_key.day} {month} {date_key.year}"
+            else:
+                date_label = "تاريخ غير محدد"
+            _add_paragraph(doc, f"— {date_label} —", bold=True, size=11)
+            doc.add_paragraph("")
+
+            hour_num = 0
+            for h_key in sorted(hours_map.keys()):
+                hour_entries = hours_map[h_key]
+                hour_num += 1
+
+                if h_key >= 0:
+                    _, time_range = _parse_entry_hour(hour_entries[0].monitoring_time)
+                else:
+                    time_range = "—"
+
+                hour_label = ARABIC_HOURS.get(hour_num, f"الساعة {hour_num}")
+                _add_paragraph(doc, f"الساعة {hour_label} | {time_range}", bold=True, size=10)
+
+                _add_mixed_paragraph(doc, [
+                    ("تحليل الساعة", True), (": ", True),
+                    (f"{len(hour_entries)} ", False),
+                    ("مادة ", False),
+                    ("— [يُعبّأ يدويًا: تحليل موجز لأبرز أحداث هذه الساعة]", False),
+                ])
+                doc.add_paragraph("")
+
+                t_hour = doc.add_table(rows=1 + len(hour_entries), cols=6)
+                t_hour.style = "Table Grid"
+                t_hour.alignment = WD_TABLE_ALIGNMENT.CENTER
+                h_row = t_hour.rows[0]
+                for j, h_text in enumerate(["الضيف/المراسل", "التوزيع", "النوع", "المادة", "التوقيت", "#"]):
+                    h_row.cells[j].text = h_text
+                _style_header_row(h_row)
+
+                for i, entry in enumerate(hour_entries):
+                    row = t_hour.rows[i + 1]
+                    link = entry.publish_link or ""
+                    has_link = link.strip() and "لم ينشر" not in link
+                    guest_cell = entry.guest_reporter_name or "—"
+                    if has_link:
+                        guest_cell = (guest_cell if guest_cell != "—" else "") + (" | رابط" if guest_cell != "—" else "رابط")
+                    row.cells[0].text = guest_cell
+                    row.cells[1].text = entry.distribution or "—"
+                    row.cells[2].text = entry.entry_type or "—"
+                    row.cells[3].text = (entry.title or "—")[:70]
+                    row.cells[4].text = _format_entry_timing(entry, include_date=True)
+                    row.cells[5].text = str(global_idx)
+                    global_idx += 1
+
+                _style_table_body(t_hour, font_size=8)
+                doc.add_paragraph("")
+    else:
+        hourly = defaultdict(list)
+        for e in entries:
+            h, _ = _parse_entry_hour(e.monitoring_time)
+            hourly[h if h is not None else -1].append(e)
+
+        global_idx = 1
+        hour_num = 0
+        for h_key in sorted(hourly.keys()):
+            hour_entries = hourly[h_key]
+            hour_num += 1
+
+            if h_key >= 0:
+                _, time_range = _parse_entry_hour(hour_entries[0].monitoring_time)
+            else:
+                time_range = "—"
+
+            hour_label = ARABIC_HOURS.get(hour_num, f"الساعة {hour_num}")
+            _add_paragraph(doc, f"الساعة {hour_label} | {time_range}", bold=True, size=10)
+
+            _add_mixed_paragraph(doc, [
+                ("تحليل الساعة", True), (": ", True),
+                (f"{len(hour_entries)} ", False),
+                ("مادة ", False),
+                ("— [يُعبّأ يدويًا: تحليل موجز لأبرز أحداث هذه الساعة]", False),
+            ])
+
+            doc.add_paragraph("")
+
+            t_hour = doc.add_table(rows=1 + len(hour_entries), cols=6)
+            t_hour.style = "Table Grid"
+            t_hour.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+            h_row = t_hour.rows[0]
+            for j, h_text in enumerate(["الضيف/المراسل", "التوزيع", "النوع", "المادة", "التوقيت", "#"]):
+                h_row.cells[j].text = h_text
+            _style_header_row(h_row)
+
+            for i, entry in enumerate(hour_entries):
+                row = t_hour.rows[i + 1]
+                link = entry.publish_link or ""
+                has_link = link.strip() and "لم ينشر" not in link
+                guest_cell = entry.guest_reporter_name or "—"
+                if has_link:
+                    guest_cell = (guest_cell if guest_cell != "—" else "") + (" | رابط" if guest_cell != "—" else "رابط")
+
+                row.cells[0].text = guest_cell
+                row.cells[1].text = entry.distribution or "—"
+                row.cells[2].text = entry.entry_type or "—"
+                row.cells[3].text = (entry.title or "—")[:70]
+                row.cells[4].text = entry.monitoring_time or "—"
+                row.cells[5].text = str(global_idx)
+                global_idx += 1
+
+            _style_table_body(t_hour, font_size=8)
+            doc.add_paragraph("")
+
+    # ── نماذج من المواد المنشورة رقمياً ──
+    _add_paragraph(doc, "نماذج من المواد المنشورة رقمياً", bold=True, size=10)
+
+    if published_entries:
+        t_pub = doc.add_table(rows=1 + len(published_entries), cols=3)
+        t_pub.style = "Table Grid"
+        t_pub.alignment = WD_TABLE_ALIGNMENT.CENTER
+        t_pub.rows[0].cells[0].text = "الرابط"
+        t_pub.rows[0].cells[1].text = "المادة"
+        t_pub.rows[0].cells[2].text = "التوقيت"
+        _style_header_row(t_pub.rows[0])
+        for i, e in enumerate(published_entries, 1):
+            link = e.publish_link or ""
+            if "facebook" in link.lower() or "fb.com" in link.lower():
+                t_pub.rows[i].cells[0].text = "Facebook"
+            elif "twitter" in link.lower() or "x.com" in link.lower():
+                t_pub.rows[i].cells[0].text = "X/Twitter"
+            else:
+                t_pub.rows[i].cells[0].text = "رابط"
+            t_pub.rows[i].cells[1].text = (e.title or "—")[:60]
+            t_pub.rows[i].cells[2].text = _format_entry_timing(e, include_date=is_custom)
+        _style_table_body(t_pub)
+    else:
+        _add_paragraph(doc, "لا توجد مواد منشورة رقمياً في هذه الفترة", justify=True)
+
+    doc.add_paragraph("")
+
+    # ── Screenshots ──
     screenshot_entries = [e for e in entries if e.screenshot_path or e.screenshot_data]
     if screenshot_entries:
-        _add_rtl_paragraph(doc, "نماذج (سكرين شوت)", bold=True, size=13)
+        _add_paragraph(doc, "نماذج (سكرين شوت)", bold=True, size=10)
         for sc_entry in screenshot_entries:
             added = False
-
             if sc_entry.screenshot_path:
                 filename = os.path.basename(sc_entry.screenshot_path)
                 abs_path = os.path.join(UPLOAD_DIR, filename)
@@ -354,115 +586,48 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                 if os.path.exists(abs_path):
                     try:
                         doc.add_picture(abs_path, width=Inches(5))
-                        last_p = doc.paragraphs[-1]
-                        last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
                         added = True
                     except Exception:
                         pass
-
             if not added and sc_entry.screenshot_data:
                 try:
                     image_stream = io.BytesIO(sc_entry.screenshot_data)
                     doc.add_picture(image_stream, width=Inches(5))
-                    last_p = doc.paragraphs[-1]
-                    last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
                     added = True
                 except Exception:
                     pass
-
             if not added:
-                _add_rtl_paragraph(doc, f"[صورة غير متوفرة: {sc_entry.title}]")
-
+                _add_paragraph(doc, f"[صورة غير متوفرة: {sc_entry.title}]")
         doc.add_paragraph("")
 
-    # --- Table 5: Detailed broadcast log (landscape page) ---
-    section = doc.add_section(start_type=2)  # new page
-    section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width = Cm(29.7)
-    section.page_height = Cm(21)
-    section.left_margin = Cm(1.5)
-    section.right_margin = Cm(1.5)
-    section.top_margin = Cm(1.5)
-    section.bottom_margin = Cm(1.5)
+    # ── الخلاصات والملاحظات التحريرية ──
+    _add_paragraph(doc, "الخلاصات والملاحظات التحريرية", bold=True, size=10)
 
-    _add_rtl_paragraph(doc, "سجل البث التفصيلي", bold=True, size=14, alignment=WD_ALIGN_PARAGRAPH.CENTER)
-    doc.add_paragraph("")
+    _add_mixed_paragraph(doc, [
+        ("أولاً — الإيقاع والكثافة", True), (": ", True),
+        ("[يُعبّأ يدويًا: ملاحظات حول إيقاع التغطية ومعدل المواد في الساعة]", False),
+    ], justify=True)
 
-    headers = [
-        "التوقيت", "العنوان", "البرنامج", "التوزيع",
-        "النوع", "الضيف/المراسل", "المدة الزمنية", "رابط النشر",
-    ]
-    col_widths = [2.5, 7.5, 2.8, 2.0, 1.8, 3.5, 2.0, 4.2]
+    _add_mixed_paragraph(doc, [
+        ("ثانياً — شبكة المراسلين", True), (": ", True),
+        (f"{len(unique_correspondents)} مراسلاً قدّموا {len(correspondents)} مداخلة. ", False),
+        ("[يُعبّأ يدويًا: ملاحظات حول التوزيع الجغرافي وأداء المراسلين]", False),
+    ], justify=True)
 
-    table5 = doc.add_table(rows=1 + len(entries), cols=len(headers))
-    table5.style = "Table Grid"
-    table5.alignment = WD_TABLE_ALIGNMENT.CENTER
-    _set_col_widths(table5, col_widths)
+    _add_mixed_paragraph(doc, [
+        ("ثالثاً — التنوّع التحليلي", True), (": ", True),
+        (f"أكثر من {len(unique_guests)} ضيفاً. ", False),
+        ("[يُعبّأ يدويًا: ملاحظات حول تنوّع الضيوف والتخصصات]", False),
+    ], justify=True)
 
-    hdr5 = table5.rows[0]
-    for j, h in enumerate(headers):
-        hdr5.cells[j].text = h
-        _set_cell_rtl(hdr5.cells[j])
-    _style_header_row(hdr5)
+    _add_mixed_paragraph(doc, [
+        ("رابعاً — التكامل بين الأخبار والاقتصاد", True), (": ", True),
+        ("[يُعبّأ يدويًا: ملاحظات حول التكامل بين الأخبار والبرامج الاقتصادية]", False),
+    ], justify=True)
 
-    for i, entry in enumerate(entries, 1):
-        row = table5.rows[i]
-
-        link = entry.publish_link or ""
-        if link.strip() and "لم ينشر" not in link:
-            link_display = "نُشر"
-        elif "لم ينشر" in link:
-            link_display = "لم يُنشر"
-        else:
-            link_display = ""
-
-        row.cells[0].text = entry.monitoring_time or ""
-        row.cells[1].text = entry.title or ""
-        row.cells[2].text = entry.program or ""
-        row.cells[3].text = entry.distribution or ""
-        row.cells[4].text = entry.entry_type or ""
-        row.cells[5].text = entry.guest_reporter_name or ""
-        row.cells[6].text = entry.clip_duration or ""
-        row.cells[7].text = link_display
-
-        for cell in row.cells:
-            _set_cell_rtl(cell)
-            for paragraph in cell.paragraphs:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                for run in paragraph.runs:
-                    run.font.size = Pt(8)
-
-    doc.add_paragraph("")
-
-    # revert to portrait for remaining content
-    section2 = doc.add_section(start_type=2)
-    section2.orientation = WD_ORIENT.PORTRAIT
-    section2.page_width = Cm(21)
-    section2.page_height = Cm(29.7)
-    section2.left_margin = Cm(2.54)
-    section2.right_margin = Cm(2.54)
-
-    # --- Summary stats ---
-    _add_rtl_paragraph(doc, "ملخص إحصائي سريع", bold=True, size=13)
-    stats_table = doc.add_table(rows=4, cols=2)
-    stats_table.style = "Table Grid"
-    stats_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr_stats = stats_table.rows[0]
-    hdr_stats.cells[0].text = "المؤشر"
-    hdr_stats.cells[1].text = "العدد"
-    _style_header_row(hdr_stats)
-
-    stats_table.rows[1].cells[0].text = "إجمالي المواد"
-    stats_table.rows[1].cells[1].text = str(total_entries)
-    stats_table.rows[2].cells[0].text = "عدد العواجل"
-    stats_table.rows[2].cells[1].text = str(dist_counter.get("عاجل", 0))
-    stats_table.rows[3].cells[0].text = "عدد الأخبار العاجلة"
-    stats_table.rows[3].cells[1].text = str(breaking_news_count)
-    for row in stats_table.rows:
-        for cell in row.cells:
-            _set_cell_rtl(cell)
-
+    # ── Save ──
     timestamp = now_palestine().strftime("%Y%m%d_%H%M%S")
     safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in report_session.name).strip()
     filename = f"{safe_name}_{timestamp}.docx"
@@ -470,3 +635,22 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     doc.save(file_path)
 
     return file_path
+
+
+class _CustomReportSession:
+    def __init__(self, start_at, end_at, custom_name=None):
+        self.name = custom_name or "تقرير مخصص حسب فترة زمنية"
+        self.description = "التطورات الإخبارية"
+        self.start_at = start_at
+        self.deadline_at = end_at
+        self.duration_hours = max(1, int((end_at - start_at).total_seconds() / 3600))
+        self.is_custom_report = True
+
+
+def generate_custom_docx_report(start_dt, end_dt, entries, breaking_news_count: int = 0, report_name: str = None) -> str:
+    fake_session = _CustomReportSession(start_dt, end_dt, report_name)
+    return generate_docx_report(
+        report_session=fake_session,
+        entries=entries,
+        breaking_news_count=breaking_news_count,
+    )

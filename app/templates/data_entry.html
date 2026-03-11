@@ -254,7 +254,17 @@
                             <strong>الأعمدة المطلوبة:</strong> فترة الرصد، العنوان / NOW<br>
                             <strong>الأعمدة الاختيارية:</strong> البرنامج، النوع، التوزيع، اسم الضيف/المراسل، رابط النشر، الأهمية، المدة الزمنية للمقطع
                         </div>
-                        <button type="submit" class="btn btn-success btn-lg">
+                        <div class="form-check mb-3">
+                            <input type="checkbox" name="delete_previous" value="1"
+                                   class="form-check-input" id="deletePrevious">
+                            <label class="form-check-label fw-bold text-danger" for="deletePrevious">
+                                <i class="bi bi-trash me-1"></i>حذف جميع البيانات السابقة قبل الاستيراد
+                            </label>
+                            <div class="form-text text-muted">
+                                <i class="bi bi-exclamation-triangle me-1"></i>سيتم حذف جميع السجلات الموجودة في هذه الجلسة واستبدالها ببيانات الملف
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg" id="importBtn" onclick="return confirmImport(event)">
                             <i class="bi bi-upload me-1"></i>استيراد البيانات
                         </button>
                     </form>
@@ -695,5 +705,16 @@
         thumb.src = '';
     });
 })();
+
+function confirmImport(e) {
+    var cb = document.getElementById('deletePrevious');
+    if (cb && cb.checked) {
+        if (!confirm('تحذير: سيتم حذف جميع البيانات السابقة في هذه الجلسة بشكل نهائي!\n\nهل أنت متأكد من المتابعة؟')) {
+            e.preventDefault();
+            return false;
+        }
+    }
+    return true;
+}
 </script>
 {% endblock %}
