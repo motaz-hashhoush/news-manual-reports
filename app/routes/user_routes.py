@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Request, Depends, Form, UploadFile, File, Query
 from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import get_db
 from app.models import ReportSession, DataEntry, BreakingNews, GeneratedReport
@@ -146,49 +147,52 @@ async def archive_page(
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db)
 ):
-    """Display archive of all generated reports"""
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
-    
-    # Pagination settings
+
     page_size = 20
     offset = (page - 1) * page_size
-    
-    # Get total count
+
     total_reports = db.query(GeneratedReport).count()
-    
-    # Query reports with pagination
-    reports_query = db.query(GeneratedReport).order_by(
-        GeneratedReport.generated_at.desc()
-    ).offset(offset).limit(page_size).all()
-    
-    # Build report data with session info and entry counts
+    total_pages = max(1, (total_reports + page_size - 1) // page_size)
+
+    rows = (
+        db.query(
+            GeneratedReport.id,
+            GeneratedReport.session_id,
+            GeneratedReport.generated_at,
+            GeneratedReport.report_type,
+            GeneratedReport.file_path,
+            ReportSession.name.label("session_name"),
+            ReportSession.start_at,
+            ReportSession.created_at.label("session_created"),
+            ReportSession.duration_hours,
+            func.count(DataEntry.id).label("entries_count"),
+        )
+        .join(ReportSession, ReportSession.id == GeneratedReport.session_id)
+        .outerjoin(DataEntry, DataEntry.session_id == ReportSession.id)
+        .group_by(GeneratedReport.id, ReportSession.id)
+        .order_by(GeneratedReport.generated_at.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
     reports_data = []
-    for report in reports_query:
-        session = db.query(ReportSession).filter(
-            ReportSession.id == report.session_id
-        ).first()
-        
-        if session:
-            entry_count = db.query(DataEntry).filter(
-                DataEntry.session_id == session.id
-            ).count()
-            
-            reports_data.append({
-                'id': report.id,
-                'session_name': session.name,
-                'session_date': session.start_at or session.created_at,
-                'duration_hours': session.duration_hours,
-                'generated_at': report.generated_at,
-                'entries_count': entry_count,
-                'file_path': report.file_path,
-                'report_type': report.report_type
-            })
-    
-    # Calculate pagination
-    total_pages = (total_reports + page_size - 1) // page_size
-    
+    for r in rows:
+        reports_data.append({
+            "id": r.id,
+            "session_id": r.session_id,
+            "session_name": r.session_name,
+            "session_date": r.start_at or r.session_created,
+            "duration_hours": r.duration_hours,
+            "generated_at": r.generated_at,
+            "entries_count": r.entries_count,
+            "file_path": r.file_path,
+            "report_type": r.report_type,
+        })
+
     return request.app.state.templates.TemplateResponse(
         "archive.html",
         {
@@ -197,8 +201,8 @@ async def archive_page(
             "reports": reports_data,
             "current_page": page,
             "total_pages": total_pages,
-            "total_reports": total_reports
-        }
+            "total_reports": total_reports,
+        },
     )
 
 
@@ -261,10 +265,8 @@ async def custom_report_page(request: Request, db: Session = Depends(get_db)):
 @router.post("/custom-report")
 async def generate_custom_report(
     request: Request,
-    start_date: str = Form(...),
-    start_time: str = Form(...),
-    end_date: str = Form(...),
-    end_time: str = Form(...),
+    start_at: str = Form(...),
+    end_at: str = Form(...),
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
@@ -272,8 +274,8 @@ async def generate_custom_report(
         return RedirectResponse(url="/login", status_code=303)
 
     try:
-        start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
-        end_dt = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M")
+        start_dt = datetime.fromisoformat(start_at)
+        end_dt = datetime.fromisoformat(end_at)
     except ValueError:
         return request.app.state.templates.TemplateResponse(
             "custom_report.html",
@@ -289,7 +291,7 @@ async def generate_custom_report(
     entries = (
         db.query(DataEntry)
         .filter(DataEntry.created_at >= start_dt, DataEntry.created_at <= end_dt)
-        .order_by(DataEntry.created_at.asc())
+        .order_by(DataEntry.monitoring_time)
         .all()
     )
 

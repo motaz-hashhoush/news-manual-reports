@@ -236,6 +236,7 @@ async def import_entries(
     session_id: int,
     request: Request,
     file: UploadFile = File(...),
+    delete_previous: str = Form(None),
     db: Session = Depends(get_db),
 ):
     user = _require_admin(request, db)
@@ -284,6 +285,11 @@ async def import_entries(
         labels = ", ".join(nice.get(m, m) for m in missing)
         return _render(error=f"الأعمدة المطلوبة غير موجودة في الملف: {labels}")
 
+    deleted_count = 0
+    if delete_previous:
+        deleted_count = db.query(DataEntry).filter(DataEntry.session_id == session_id).delete()
+        db.flush()
+
     df = df.fillna("")
     inserted = 0
     for _, row in df.iterrows():
@@ -309,7 +315,10 @@ async def import_entries(
         inserted += 1
 
     db.commit()
-    return _render(success=f"تم استيراد {inserted} سجل بنجاح من الملف")
+    msg = f"تم استيراد {inserted} سجل بنجاح من الملف"
+    if deleted_count:
+        msg = f"تم حذف {deleted_count} سجل سابق، و" + msg
+    return _render(success=msg)
 
 
 @router.get("/entries/{session_id}")
