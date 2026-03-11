@@ -10,7 +10,7 @@ from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
-
+from docx.oxml import OxmlElement
 from app.config import UPLOAD_DIR
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -61,6 +61,7 @@ def _set_cell_shading(cell, color_hex: str):
 def _style_header_row(row, bg_color="1F4E79"):
     for cell in row.cells:
         _set_cell_shading(cell, bg_color)
+        _set_cell_rtl(cell)
         for paragraph in cell.paragraphs:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in paragraph.runs:
@@ -82,6 +83,58 @@ def _set_run_rtl_font(run):
     rPr = run._element.get_or_add_rPr()
     cs = rPr.makeelement(qn("w:rFonts"), {qn("w:cs"): FONT_NAME})
     rPr.append(cs)
+
+
+def _is_valid_url(text):
+    return bool(re.match(r"https?://\S+", text.strip()))
+
+
+def _append_hyperlink(paragraph, url, display_text):
+    """Append a clickable HYPERLINK field to an existing paragraph."""
+    run_begin = paragraph.add_run()
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    run_begin._r.append(fld_begin)
+
+    run_instr = paragraph.add_run()
+    instr = OxmlElement("w:instrText")
+    instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    instr.text = f' HYPERLINK "{url}" '
+    run_instr._r.append(instr)
+
+    run_sep = paragraph.add_run()
+    fld_sep = OxmlElement("w:fldChar")
+    fld_sep.set(qn("w:fldCharType"), "separate")
+    run_sep._r.append(fld_sep)
+
+    run_text = paragraph.add_run(display_text)
+    run_text.font.color.rgb = RGBColor(0x05, 0x63, 0xC1)
+    run_text.font.underline = True
+    run_text.font.name = FONT_NAME
+    _set_run_rtl_font(run_text)
+
+    run_end = paragraph.add_run()
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+    run_end._r.append(fld_end)
+
+
+def _add_hyperlink_to_cell(cell, url, display_text):
+    """Replace cell content with a clickable hyperlink."""
+    paragraph = cell.paragraphs[0]
+    paragraph.clear()
+    _append_hyperlink(paragraph, url, display_text)
+
+
+def _set_table_rtl(table):
+    """Set table direction to RTL using bidiVisual."""
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    bidi_visual = OxmlElement("w:bidiVisual")
+    tblPr.append(bidi_visual)
 
 
 def _add_paragraph(doc, text="", bold=False, size=None, alignment=None, justify=False, font=FONT_NAME):
@@ -291,12 +344,13 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     t_ind = doc.add_table(rows=1 + len(indicators), cols=2)
     t_ind.style = "Table Grid"
     t_ind.alignment = WD_TABLE_ALIGNMENT.CENTER
-    t_ind.rows[0].cells[0].text = "القيمة"
-    t_ind.rows[0].cells[1].text = "المؤشر"
+    _set_table_rtl(t_ind)
+    t_ind.rows[0].cells[0].text = "المؤشر"
+    t_ind.rows[0].cells[1].text = "القيمة"
     _style_header_row(t_ind.rows[0])
     for i, (label, value) in enumerate(indicators, 1):
-        t_ind.rows[i].cells[0].text = value
-        t_ind.rows[i].cells[1].text = label
+        t_ind.rows[i].cells[0].text = label
+        t_ind.rows[i].cells[1].text = value
     _style_table_body(t_ind)
 
     doc.add_paragraph("")
@@ -308,14 +362,15 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     t_dist = doc.add_table(rows=1 + len(dist_items), cols=3)
     t_dist.style = "Table Grid"
     t_dist.alignment = WD_TABLE_ALIGNMENT.CENTER
-    t_dist.rows[0].cells[0].text = "الوصف الوظيفي"
+    _set_table_rtl(t_dist)
+    t_dist.rows[0].cells[0].text = "شكل التقديم"
     t_dist.rows[0].cells[1].text = "العدد"
-    t_dist.rows[0].cells[2].text = "شكل التقديم"
+    t_dist.rows[0].cells[2].text = "الوصف الوظيفي"
     _style_header_row(t_dist.rows[0])
     for i, (dist, count) in enumerate(dist_items, 1):
-        t_dist.rows[i].cells[0].text = DIST_DESCRIPTIONS.get(dist, "—")
+        t_dist.rows[i].cells[0].text = dist
         t_dist.rows[i].cells[1].text = f"{count} مادة"
-        t_dist.rows[i].cells[2].text = dist
+        t_dist.rows[i].cells[2].text = DIST_DESCRIPTIONS.get(dist, "—")
     _style_table_body(t_dist)
 
     doc.add_paragraph("")
@@ -327,15 +382,16 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
     t_type = doc.add_table(rows=1 + len(type_items), cols=3)
     t_type.style = "Table Grid"
     t_type.alignment = WD_TABLE_ALIGNMENT.CENTER
-    t_type.rows[0].cells[0].text = "النسبة"
+    _set_table_rtl(t_type)
+    t_type.rows[0].cells[0].text = "التصنيف"
     t_type.rows[0].cells[1].text = "العدد"
-    t_type.rows[0].cells[2].text = "التصنيف"
+    t_type.rows[0].cells[2].text = "النسبة"
     _style_header_row(t_type.rows[0])
     for i, (etype, count) in enumerate(type_items, 1):
         pct = f"{(count / total * 100):.0f}%" if total else "0%"
-        t_type.rows[i].cells[0].text = pct
+        t_type.rows[i].cells[0].text = etype
         t_type.rows[i].cells[1].text = f"≈ {count} مادة"
-        t_type.rows[i].cells[2].text = etype
+        t_type.rows[i].cells[2].text = pct
     _style_table_body(t_type)
 
     doc.add_paragraph("")
@@ -353,16 +409,17 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         t_corr = doc.add_table(rows=1 + len(corr_data), cols=4)
         t_corr.style = "Table Grid"
         t_corr.alignment = WD_TABLE_ALIGNMENT.CENTER
-        t_corr.rows[0].cells[0].text = "الملف الرئيسي"
-        t_corr.rows[0].cells[1].text = "عدد المداخلات"
-        t_corr.rows[0].cells[2].text = "الموقع"
-        t_corr.rows[0].cells[3].text = "المراسل/الصحفي"
+        _set_table_rtl(t_corr)
+        t_corr.rows[0].cells[0].text = "المراسل/الصحفي"
+        t_corr.rows[0].cells[1].text = "الموقع"
+        t_corr.rows[0].cells[2].text = "عدد المداخلات"
+        t_corr.rows[0].cells[3].text = "الملف الرئيسي"
         _style_header_row(t_corr.rows[0])
         for i, (name, count, topic) in enumerate(corr_data, 1):
-            t_corr.rows[i].cells[0].text = topic
-            t_corr.rows[i].cells[1].text = str(count)
-            t_corr.rows[i].cells[2].text = "—"
-            t_corr.rows[i].cells[3].text = name
+            t_corr.rows[i].cells[0].text = name
+            t_corr.rows[i].cells[1].text = "—"
+            t_corr.rows[i].cells[2].text = str(count)
+            t_corr.rows[i].cells[3].text = topic
         _style_table_body(t_corr)
     else:
         _add_paragraph(doc, "لا يوجد مراسلون في هذه الفترة", justify=True)
@@ -380,14 +437,15 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         t_guest = doc.add_table(rows=1 + len(seen_guests), cols=3)
         t_guest.style = "Table Grid"
         t_guest.alignment = WD_TABLE_ALIGNMENT.CENTER
-        t_guest.rows[0].cells[0].text = "الموضوع الرئيسي"
+        _set_table_rtl(t_guest)
+        t_guest.rows[0].cells[0].text = "الضيف"
         t_guest.rows[0].cells[1].text = "الصفة"
-        t_guest.rows[0].cells[2].text = "الضيف"
+        t_guest.rows[0].cells[2].text = "الموضوع الرئيسي"
         _style_header_row(t_guest.rows[0])
         for i, (name, topic) in enumerate(seen_guests.items(), 1):
-            t_guest.rows[i].cells[0].text = topic
+            t_guest.rows[i].cells[0].text = name
             t_guest.rows[i].cells[1].text = "—"
-            t_guest.rows[i].cells[2].text = name
+            t_guest.rows[i].cells[2].text = topic
         _style_table_body(t_guest)
     else:
         _add_paragraph(doc, "لا يوجد ضيوف في هذه الفترة", justify=True)
@@ -401,14 +459,15 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         t_off = doc.add_table(rows=1 + len(officials), cols=3)
         t_off.style = "Table Grid"
         t_off.alignment = WD_TABLE_ALIGNMENT.CENTER
-        t_off.rows[0].cells[0].text = "أبرز ما جاء في التصريح"
+        _set_table_rtl(t_off)
+        t_off.rows[0].cells[0].text = "المسؤول"
         t_off.rows[0].cells[1].text = "الصفة"
-        t_off.rows[0].cells[2].text = "المسؤول"
+        t_off.rows[0].cells[2].text = "أبرز ما جاء في التصريح"
         _style_header_row(t_off.rows[0])
         for i, e in enumerate(officials, 1):
-            t_off.rows[i].cells[0].text = e.title or "—"            
+            t_off.rows[i].cells[0].text = e.guest_reporter_name or "—"
             t_off.rows[i].cells[1].text = "—"
-            t_off.rows[i].cells[2].text = e.guest_reporter_name or "—"
+            t_off.rows[i].cells[2].text = e.title or "—"
         _style_table_body(t_off)
     else:
         _add_paragraph(doc, "لا يوجد تصريحات مسؤولين في هذه الفترة", justify=True)
@@ -465,8 +524,9 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                 t_hour = doc.add_table(rows=1 + len(hour_entries), cols=6)
                 t_hour.style = "Table Grid"
                 t_hour.alignment = WD_TABLE_ALIGNMENT.CENTER
+                _set_table_rtl(t_hour)
                 h_row = t_hour.rows[0]
-                for j, h_text in enumerate(["الضيف/المراسل", "التوزيع", "النوع", "المادة", "التوقيت", "#"]):
+                for j, h_text in enumerate(["#", "التوقيت", "المادة", "النوع", "التوزيع", "الضيف/المراسل"]):
                     h_row.cells[j].text = h_text
                 _style_header_row(h_row)
 
@@ -475,14 +535,21 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                     link = entry.publish_link or ""
                     has_link = link.strip() and "لم ينشر" not in link
                     guest_cell = entry.guest_reporter_name or "—"
-                    if has_link:
-                        guest_cell = (guest_cell if guest_cell != "—" else "") + (" | رابط" if guest_cell != "—" else "رابط")
-                    row.cells[0].text = guest_cell
-                    row.cells[1].text = entry.distribution or "—"
-                    row.cells[2].text = entry.entry_type or "—"
-                    row.cells[3].text = entry.title or "—"      
-                    row.cells[4].text = _format_entry_timing(entry, include_date=True)
-                    row.cells[5].text = str(global_idx)
+                    if has_link and _is_valid_url(link):
+                        p = row.cells[5].paragraphs[0]
+                        p.clear()
+                        if guest_cell != "—":
+                            p.add_run(guest_cell + " | ")
+                        _append_hyperlink(p, link.strip(), "رابط")
+                    elif has_link:
+                        row.cells[5].text = (guest_cell + " | " + link.strip()) if guest_cell != "—" else link.strip()
+                    else:
+                        row.cells[5].text = guest_cell
+                    row.cells[4].text = entry.distribution or "—"
+                    row.cells[3].text = entry.entry_type or "—"
+                    row.cells[2].text = entry.title or "—"      
+                    row.cells[1].text = _format_entry_timing(entry, include_date=True)
+                    row.cells[0].text = str(global_idx)
                     global_idx += 1
 
                 _style_table_body(t_hour, font_size=8)
@@ -519,9 +586,10 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
             t_hour = doc.add_table(rows=1 + len(hour_entries), cols=6)
             t_hour.style = "Table Grid"
             t_hour.alignment = WD_TABLE_ALIGNMENT.CENTER
+            _set_table_rtl(t_hour)
 
             h_row = t_hour.rows[0]
-            for j, h_text in enumerate(["الضيف/المراسل", "التوزيع", "النوع", "المادة", "التوقيت", "#"]):
+            for j, h_text in enumerate(["#", "التوقيت", "المادة", "النوع", "التوزيع", "الضيف/المراسل"]):
                 h_row.cells[j].text = h_text
             _style_header_row(h_row)
 
@@ -530,15 +598,21 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
                 link = entry.publish_link or ""
                 has_link = link.strip() and "لم ينشر" not in link
                 guest_cell = entry.guest_reporter_name or "—"
-                if has_link:
-                    guest_cell = (guest_cell if guest_cell != "—" else "") + (" | رابط" if guest_cell != "—" else "رابط")
-
-                row.cells[0].text = guest_cell
-                row.cells[1].text = entry.distribution or "—"
-                row.cells[2].text = entry.entry_type or "—"
-                row.cells[3].text = entry.title or "—"                
-                row.cells[4].text = entry.monitoring_time or "—"
-                row.cells[5].text = str(global_idx)
+                if has_link and _is_valid_url(link):
+                    p = row.cells[5].paragraphs[0]
+                    p.clear()
+                    if guest_cell != "—":
+                        p.add_run(guest_cell + " | ")
+                    _append_hyperlink(p, link.strip(), "رابط")
+                elif has_link:
+                    row.cells[5].text = (guest_cell + " | " + link.strip()) if guest_cell != "—" else link.strip()
+                else:
+                    row.cells[5].text = guest_cell
+                row.cells[4].text = entry.distribution or "—"
+                row.cells[3].text = entry.entry_type or "—"
+                row.cells[2].text = entry.title or "—"                
+                row.cells[1].text = entry.monitoring_time or "—"
+                row.cells[0].text = str(global_idx)
                 global_idx += 1
 
             _style_table_body(t_hour, font_size=8)
@@ -551,20 +625,25 @@ def generate_docx_report(report_session, entries, breaking_news_count: int = 0) 
         t_pub = doc.add_table(rows=1 + len(published_entries), cols=3)
         t_pub.style = "Table Grid"
         t_pub.alignment = WD_TABLE_ALIGNMENT.CENTER
-        t_pub.rows[0].cells[0].text = "الرابط"
+        _set_table_rtl(t_pub)
+        t_pub.rows[0].cells[0].text = "التوقيت"
         t_pub.rows[0].cells[1].text = "المادة"
-        t_pub.rows[0].cells[2].text = "التوقيت"
+        t_pub.rows[0].cells[2].text = "الرابط"
         _style_header_row(t_pub.rows[0])
         for i, e in enumerate(published_entries, 1):
             link = e.publish_link or ""
-            if "facebook" in link.lower() or "fb.com" in link.lower():
-                t_pub.rows[i].cells[0].text = "Facebook"
-            elif "twitter" in link.lower() or "x.com" in link.lower():
-                t_pub.rows[i].cells[0].text = "X/Twitter"
+            if _is_valid_url(link):
+                if "facebook" in link.lower() or "fb.com" in link.lower():
+                    display_text = "Facebook"
+                elif "twitter" in link.lower() or "x.com" in link.lower():
+                    display_text = "X/Twitter"
+                else:
+                    display_text = "رابط"
+                _add_hyperlink_to_cell(t_pub.rows[i].cells[2], link.strip(), display_text)
             else:
-                t_pub.rows[i].cells[0].text = "رابط"
+                t_pub.rows[i].cells[2].text = link.strip() if link.strip() else "—"
             t_pub.rows[i].cells[1].text = (e.title or "—")
-            t_pub.rows[i].cells[2].text = _format_entry_timing(e, include_date=is_custom)
+            t_pub.rows[i].cells[0].text = _format_entry_timing(e, include_date=is_custom)
         _style_table_body(t_pub)
     else:
         _add_paragraph(doc, "لا توجد مواد منشورة رقمياً في هذه الفترة", justify=True)
